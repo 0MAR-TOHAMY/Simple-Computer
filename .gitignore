@@ -1,0 +1,14 @@
+# build output of the Logisim probes
+*.class
+# Python
+__pycache__/
+*.pyc
+# editors and OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+# Logisim backups
+*.circ.bak
+*.circ~

@@ -1,0 +1,8 @@
+# keep line endings consistent across Windows and other systems
+* text=auto
+*.circ text
+*.html text
+*.md text
+*.py text
+*.java text
+*.json text

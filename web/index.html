@@ -1,0 +1,2314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simple Computer</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f59e0b' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='5' y='5' width='14' height='14' rx='3'/%3E%3Cpath d='M9.5 2v3M14.5 2v3M9.5 19v3M14.5 19v3M2 9.5h3M2 14.5h3M19 9.5h3M19 14.5h3'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap">
+<script>
+  try {
+    const t = localStorage.getItem("simple-computer.theme");
+    document.documentElement.dataset.theme = t || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+  } catch (e) { document.documentElement.dataset.theme = "dark"; }
+</script>
+<style>
+/* Layout: the circuit owns the screen. A slim toolbar on top, view tabs, the board, one stage line under it.
+   Program listing and notes live in a drawer that opens on demand. One dark look, one orange accent. */
+:root {
+  color-scheme: dark;
+  --bg: #0c0e11;
+  --panel: #13161b;
+  --line: #262b33;
+  --ink: #e7e9ed;
+  --dim: #808895;
+  --faint: #3d444f;
+  --acc: #f59e0b;
+  --acc-soft: rgba(245, 158, 11, .13);
+  --acc-line: rgba(245, 158, 11, .55);
+  --hover: #1b1f26;
+  --card: #0f1216;
+  --core: #13171c;
+  --wire: #2e343d;
+  --jdot: #343a44;
+  --txt: #b9bec7;
+  --sub: #c3c8d0;
+  --main-ink: #1a1100;
+  --main-hover: #fbb13a;
+  --shadow: rgba(0, 0, 0, .45);
+  --err: #ff6b6b;
+  --err-ink: #ffb3b3;
+  --err-soft: rgba(255, 107, 107, .07);
+  --err-line: rgba(255, 107, 107, .4);
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --head: "Space Grotesk", "Segoe UI", sans-serif;
+}
+/* light theme: same layout, light surfaces, red accent */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f5f8;
+  --panel: #ffffff;
+  --line: #d2d8e0;
+  --ink: #111821;
+  --dim: #4a5462;
+  --faint: #97a1ae;
+  --acc: #dc2626;
+  --acc-soft: rgba(220, 38, 38, .09);
+  --acc-line: rgba(220, 38, 38, .50);
+  --hover: #edf1f6;
+  --card: #f7f9fb;
+  --core: #ffffff;
+  --wire: #a5aebb;
+  --jdot: #7f8a98;
+  --txt: #1d2530;
+  --sub: #3a4350;
+  --main-ink: #ffffff;
+  --main-hover: #b91c1c;
+  --shadow: rgba(15, 23, 42, .16);
+  --err: #7c3aed;
+  --err-ink: #6d28d9;
+  --err-soft: rgba(124, 58, 237, .06);
+  --err-line: rgba(124, 58, 237, .35);
+}
+* { box-sizing: border-box; }
+/* scrolling still works, the bars are hidden */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
+[hidden] { display: none !important; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font-family: var(--mono); font-size: 13px; line-height: 1.5;
+  padding-block: 10px 12px; display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); gap: 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+button, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+.hi { width: 18px; height: 18px; flex: 0 0 auto; display: block; }
+
+/* toolbar */
+.bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.group { display: flex; align-items: center; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.ib {
+  display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; border-radius: 7px;
+  padding: 6px 9px; cursor: pointer; color: var(--ink); font-size: 12px;
+}
+.ib:hover { background: var(--hover); }
+#bRun span { display: inline-block; min-width: 8ch; text-align: left; }
+.ib.main { background: var(--acc); color: var(--main-ink); font-weight: 700; }
+.ib.main:hover { background: var(--main-hover); }
+.ib[aria-pressed="true"] { background: var(--acc-soft); color: var(--acc); }
+.seg .ib { padding: 6px 7px; color: var(--dim); }
+.seg .ib[aria-pressed="true"] { color: var(--acc); background: var(--acc-soft); }
+select.ib { appearance: none; padding-right: 22px; background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23808895' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 8px center; }
+/* template menu */
+.dd { position: relative; }
+.ddbtn { gap: 8px; max-width: 180px; }
+.ddbtn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ddbtn .hi { width: 14px; height: 14px; color: var(--dim); transition: transform .15s; }
+.ddbtn[aria-expanded="true"] .hi { transform: rotate(180deg); }
+.ddlist { position: absolute; top: calc(100% + 8px); right: 0; z-index: 30; width: 240px; max-height: min(70vh, 520px); overflow-y: auto;
+  margin: 0; padding: 6px; list-style: none; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 18px 40px var(--shadow); }
+.ddlist li { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: baseline; gap: 8px; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
+.ddlist li:hover, .ddlist li.kb { background: var(--hover); }
+.ddlist li[aria-selected="true"] { background: var(--acc-soft); }
+.ddlist .n { color: var(--faint); font-size: 11px; text-align: right; }
+.ddlist .t { color: var(--ink); font-size: 12.5px; }
+.ddlist li[aria-selected="true"] .t, .ddlist li[aria-selected="true"] .n { color: var(--acc); }
+.ddlist .s { color: var(--dim); font-size: 11px; }
+/* code drawer */
+.drawer.left { left: 0; right: auto; border-left: 0; border-right: 1px solid var(--line); width: min(460px, 94vw); transform: translateX(-105%);
+  box-shadow: 20px 0 40px var(--shadow); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 16px; }
+.drawer.left.open { transform: none; }
+.editor { display: grid; grid-template-columns: auto minmax(0, 1fr); border: 1px solid var(--line); border-radius: 10px; background: var(--bg); height: min(46vh, 420px); overflow: hidden; }
+.gutter { margin: 0; padding: 10px 8px 10px 10px; color: var(--faint); text-align: right; font: 12px/1.6 var(--mono); overflow: hidden; user-select: none; border-right: 1px solid var(--line); }
+#codeArea { margin: 0; padding: 10px 12px; border: 0; outline: 0; resize: none; background: transparent; color: var(--ink); font: 12px/1.6 var(--mono); white-space: pre; overflow: auto; tab-size: 8; }
+.editor:focus-within { border-color: var(--acc-line); }
+.crow { display: flex; align-items: center; gap: 10px; margin: 12px 0 18px; }
+.ib.main:disabled { opacity: .45; cursor: not-allowed; }
+.gutter .bad { color: var(--err); font-weight: 700; }
+.cerr { list-style: none; margin: -6px 0 16px; padding: 8px 10px; border: 1px solid var(--err-line); background: var(--err-soft); border-radius: 10px; max-height: 140px; overflow-y: auto; font-size: 11.5px; }
+.cerr li { padding: 2px 0; color: var(--err-ink); cursor: pointer; }
+.cerr li b { color: var(--err); margin-right: 6px; }
+#codeMsg.ok { color: var(--acc); }
+.cnote.cmsg { margin: 0; line-height: 1.2; }
+.cnote { color: var(--dim); font-size: 11.5px; margin: 0 0 10px; }
+.cnote code { color: var(--ink); }
+.isa { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-bottom: 10px; }
+.isa td { padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.isa td:first-child { color: var(--ink); white-space: nowrap; }
+.isa td:last-child { color: var(--dim); }
+select.ib option { background: var(--panel); color: var(--ink); }
+
+/* tabs */
+.tabsrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-right: auto; min-width: 0; }
+.sr { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; margin: -1px; padding: 0; border: 0; }
+.tabs { flex-wrap: wrap; min-width: 0; }
+.tab { background: transparent; border: 0; border-radius: 7px; padding: 6px 7px; white-space: nowrap; cursor: pointer; color: var(--dim); font-size: 12px; }
+.tab:hover { background: var(--hover); }
+.tab[aria-selected="true"] { color: var(--acc); background: var(--acc-soft); }
+.tab.live:not([aria-selected="true"]) { color: var(--ink); }
+.switch { color: var(--dim); user-select: none; position: relative; }
+.switch:has(input:checked) { color: var(--acc); background: var(--acc-soft); }
+.switch:has(input:focus-visible) { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+/* board */
+.board { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; min-height: 0; display: flex; }
+.board > svg { display: block; width: 100%; height: 100%; }
+#detailBoard { position: relative; }
+.partbtn { position: absolute; top: 10px; right: 10px; z-index: 2; background: var(--panel); border: 1px solid var(--line); }
+body.busy .partbtn { display: none; }
+#detailBoard .partbtn svg { width: 16px; height: 16px; flex: 0 0 auto; }
+.pedit input { width: 100%; height: 100%; box-sizing: border-box; border: 0; border-radius: 5px; background: transparent; color: var(--ink);
+  font: 700 11px var(--mono); text-align: center; padding: 0 2px; outline: none; }
+.pedit input:hover { background: var(--hover); }
+.pedit input:focus { background: var(--acc-soft); color: var(--acc); }
+.pedit input.bad { background: var(--err-soft); color: var(--err); }
+body.busy .pedit { display: none; }
+body:not(.busy) .pval.in, body:not(.busy) .sval.in { visibility: hidden; }
+
+/* stage line */
+.stage { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; align-items: center; gap: 12px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.phases { display: flex; gap: 3px; }
+.phases i { width: 18px; height: 4px; border-radius: 2px; background: var(--line); }
+.phases i.on { background: var(--acc); }
+.phases i.done { background: var(--faint); }
+.stage b { font-family: var(--head); font-size: 14px; color: var(--acc); white-space: nowrap; }
+.stage p { margin: 0; color: var(--sub); font-size: 12.5px; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+#statusR { color: var(--acc); font-size: 11.5px; white-space: nowrap; }
+.stage small { color: var(--dim); font-size: 11.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* drawer */
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(330px, 92vw); background: var(--panel); border-left: 1px solid var(--line);
+  padding: calc(14px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) 16px;
+  overflow-y: auto; z-index: 20; transform: translateX(105%); transition: transform .22s ease; box-shadow: -20px 0 40px var(--shadow);
+}
+.drawer.open { transform: none; }
+.drawer h2 { font-family: var(--head); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--acc); margin: 0 0 8px; }
+.dhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.prog { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 1px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.prog li { display: grid; grid-template-columns: 22px 42px minmax(0, 1fr); gap: 8px; padding: 3px 6px; border-radius: 5px; color: var(--dim); }
+.prog li.cur { background: var(--acc-soft); color: var(--ink); }
+.prog li.cur .a { color: var(--acc); }
+.prog .h { color: var(--faint); }
+.legend { display: grid; gap: 6px; color: var(--dim); font-size: 12px; }
+.legend b { color: var(--ink); font-weight: 500; }
+
+/* overview drawing */
+.card { fill: var(--card); stroke: var(--faint); stroke-width: 1.3; transition: stroke .2s, fill .2s; }
+.ctitle { fill: var(--ink); font: 700 14.5px var(--head); letter-spacing: .05em; }
+.cnum { fill: var(--acc); font: 700 14.5px var(--head); }
+.port { fill: var(--bg); stroke: var(--dim); stroke-width: 1.3; }
+.plab { fill: var(--dim); font: 600 12.5px var(--mono); }
+.big { fill: var(--ink); font: 700 22px var(--mono); }
+.txt { fill: var(--txt); font: 600 13px var(--mono); }
+.mut { fill: var(--dim); font: 500 12px var(--mono); }
+.chip rect { fill: var(--bg); stroke: var(--line); }
+.chip text { fill: var(--dim); font: 600 12px var(--mono); }
+.chip.hi rect { stroke: var(--acc-line); fill: var(--acc-soft); }
+.chip.hi text { fill: var(--acc); }
+.rrow rect { fill: transparent; stroke: var(--line); }
+.rrow.hi rect { stroke: var(--acc); fill: none; }
+.rrow.hi text { fill: var(--acc); }
+.mx { fill: var(--card); stroke: var(--dim); stroke-width: 1.3; }
+.blk.on .card, .blk.on .mx { stroke: var(--acc); stroke-width: 1.2; }
+.core { fill: var(--core); }
+.cell { fill: var(--bg); stroke: var(--line); }
+.hiText { fill: var(--acc) !important; }
+.blk.on .ctitle { fill: var(--acc); }
+.wire { fill: none; stroke: var(--wire); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.wire.bus { stroke-width: 4; }
+.flow { fill: none; stroke: var(--acc); stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: butt; opacity: 0; pointer-events: none; }
+.hopErase { stroke: var(--panel); fill: none; }
+.cellg .cell { fill: var(--bg); stroke: var(--line); }
+.cellg.hi .cell { stroke: var(--acc); }
+.cellg.hi .txt { fill: var(--acc); }
+.cellv { font-size: 17px; }
+.wlab { fill: var(--dim); font: 600 12px var(--mono); }
+.wlab.on { fill: var(--acc); }
+.jdot { fill: var(--jdot); } .jdot.on { fill: var(--acc); }
+.hop { fill: none; stroke: var(--panel); stroke-width: 6; }
+
+/* inside views */
+.sym { fill: var(--bg); stroke: var(--dim); stroke-width: 1.4; }
+.symg.on .sym { stroke: var(--acc); stroke-width: 1.3; }
+.symg.on .clk { stroke: var(--acc); }
+.clk { fill: none; stroke: var(--dim); stroke-width: 1.4; }
+.symg.on .slabel, .symg.on .ssub:not(.opt), .ssub.on, .symg.on .opt.sel { fill: var(--acc); }
+.symg.on .opt.sel { font-weight: 700; }
+.dot { fill: var(--faint); } .dot.on { fill: var(--acc); }
+#detail .wire { stroke: var(--wire); stroke-width: 2.4; } #detail .wire.bus { stroke-width: 4.2; }
+#detail .flow { stroke-width: 1.6; }
+.slabel { fill: var(--ink); font: 700 16px var(--mono); }
+.ssub { fill: var(--dim); font: 500 13.5px var(--mono); }
+.pbox { fill: var(--bg); stroke: var(--line); stroke-width: 1.2; transition: fill .25s, stroke .25s; }
+.pbox.on { stroke: var(--acc); }
+.pbox.hold { fill: var(--acc-soft); stroke-width: 1.8; animation: holdPulse .7s ease-in-out infinite alternate; }
+.pval { fill: var(--acc); font: 700 11px var(--mono); }
+.bin { fill: var(--dim); font: 500 11px var(--mono); }
+.peq { fill: var(--dim); font: 700 12px var(--mono); }
+@keyframes holdPulse { from { stroke-opacity: 1; } to { stroke-opacity: .35; } }
+.sval { fill: var(--ink); font: 700 12.5px var(--mono); }
+.rname { fill: var(--dim); font: 700 13.5px var(--mono); }
+.sval.on, .nval { fill: var(--acc); }
+.ndec { fill: var(--dim); font-weight: 500; }
+.nval { font: 700 11px var(--mono); paint-order: stroke; stroke: var(--panel); stroke-width: 3px; }
+.ttl { fill: var(--dim); font: 500 15px var(--mono); }
+.spine { stroke: var(--dim); stroke-width: 2.5; fill: none; }
+
+@media (max-width: 760px) {
+  .bar { gap: 6px; }
+  .tabsrow { flex: 1 0 100%; }
+  .group { flex: 1 1 auto; justify-content: space-between; min-width: 0; }
+  #bRun span, .seg > svg { display: none; }
+  .ib { padding: 6px 7px; }
+  .ddbtn { max-width: 40vw; }
+  .ddlist { width: min(300px, 92vw); }
+  .tab { padding: 5px 7px; font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card, .wire, .drawer { transition: none; }
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <h1 class="sr">Simple Computer</h1>
+  <nav class="tabsrow" aria-label="Parts">
+    <div class="group tabs" role="tablist" id="tabs"></div>
+    <div class="group"><label class="ib switch" title="Follow the active part"><input type="checkbox" id="follow" checked class="sr"> Follow</label></div>
+  </nav>
+  <div class="group">
+    <button class="ib main" id="bStep" type="button" title="Step one instruction (→)"><svg class="hi" viewBox="0 0 24 24" fill="none" data-icon="step"></svg>Step</button>
+    <button class="ib" id="bRun" type="button" aria-pressed="false" title="Run or pause (space)"><svg class="hi" viewBox="0 0 24 24" fill="none" data-icon="play"></svg><span>Run</span></button>
+    <button class="ib" id="bReset" type="button" title="Reset (R)"><svg class="hi" viewBox="0 0 24 24" fill="none" data-icon="reset"></svg></button>
+  </div>
+  <div class="group seg" id="speeds" title="Animation speed"></div>
+  <div class="group">
+    <div class="dd" id="progDD">
+      <button class="ib ddbtn" id="progBtn" type="button" aria-haspopup="listbox" aria-expanded="false" title="Choose a program"><span id="progName"></span><svg class="hi" viewBox="0 0 24 24" fill="none" data-icon="chev"></svg></button>
+      <ul class="ddlist" id="progList" role="listbox" aria-label="Programs" hidden></ul>
+    </div>
+    <button class="ib" id="bCode" type="button" aria-pressed="false" title="Write code"><svg class="hi" viewBox="0 0 24 24" fill="none" data-icon="code"></svg></button>
+    <button class="ib" id="bList" type="button" aria-pressed="false" title="Program listing and notes"><svg class="hi" viewBox="0 0 24 24" fill="none" data-icon="list"></svg></button>
+    <button class="ib" id="bTheme" type="button" title="Light or dark (T)"><svg class="hi" viewBox="0 0 24 24" fill="none" data-icon="sun"></svg></button>
+  </div>
+</header>
+
+
+<div class="board" id="overBoard">
+  <svg id="over" viewBox="0 0 1380 760" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Overview of the simple computer">
+    <defs>
+      <filter id="glow" filterUnits="userSpaceOnUse" x="-3000" y="-3000" width="8000" height="8000">
+        <feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <g id="oW"></g><g id="oB"></g><g id="oP"></g>
+  </svg>
+</div>
+<div class="board" id="detailBoard" hidden>
+  <button class="ib partbtn" id="bPart" type="button" title="Run this part with the values in its input boxes"><svg class="hi" viewBox="0 0 24 24" fill="none" data-icon="play"></svg>Run this part</button>
+  <svg id="detail" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Inside view of one part">
+    <defs>
+      <filter id="glow2" filterUnits="userSpaceOnUse" x="-3000" y="-3000" width="8000" height="8000">
+        <feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <g id="dW"></g><g id="dB"></g><g id="dV"></g>
+  </svg>
+</div>
+
+<div class="stage sr" aria-live="polite">
+  <div class="phases" id="phases"><i></i><i></i><i></i><i></i><i></i></div>
+  <b id="stageName">Ready</b>
+  <p id="stageText">Press Step to run one instruction.</p>
+  <small id="statusL">cycle 0 · PC 00</small>
+  <small id="statusR"></small>
+</div>
+
+<aside class="drawer left" id="codeDrawer" aria-label="Code">
+  <div class="dhead"><h2>Code</h2><button class="ib" id="bCodeClose" type="button" aria-label="Close"><svg class="hi" viewBox="0 0 24 24" fill="none" data-icon="close"></svg></button></div>
+  <p class="cnote" id="codeFrom"></p>
+  <div class="editor"><pre class="gutter" id="codeGutter" aria-hidden="true"></pre><textarea id="codeArea" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Assembly code"></textarea></div>
+  <div class="crow"><button class="ib main" id="bAssemble" type="button" title="Assemble this code and load it into program memory (Ctrl+Enter)">Assemble &amp; load</button><span class="cnote cmsg" id="codeMsg">Ctrl + Enter</span></div>
+  <ul class="cerr" id="codeErr" hidden></ul>
+  <h2>Syntax</h2>
+  <table class="isa">
+    <tr><td>LDI Rd, n</td><td>Rd ← n</td></tr>
+    <tr><td>MOV Rd, Ra</td><td>Rd ← Ra</td></tr>
+    <tr><td>ADD Rd, Ra, Rb</td><td>Rd ← Ra + Rb</td></tr>
+    <tr><td>SUB Rd, Ra, Rb</td><td>Rd ← Ra − Rb</td></tr>
+    <tr><td>AND / OR / XOR Rd, Ra, Rb</td><td>bitwise</td></tr>
+    <tr><td>NOT Rd, Ra</td><td>Rd ← NOT Ra</td></tr>
+    <tr><td>INC Rd, Ra</td><td>Rd ← Ra + 1</td></tr>
+    <tr><td>SHL / SHR Rd, Rb</td><td>Rd ← Rb shifted by 1</td></tr>
+    <tr><td>LD Rd, [Ra]</td><td>Rd ← M[Ra]</td></tr>
+    <tr><td>ST [Ra], Rb</td><td>M[Ra] ← Rb</td></tr>
+    <tr><td>JMP label</td><td>PC ← label</td></tr>
+    <tr><td>BRZ Ra, label</td><td>if Ra = 0: PC ← label</td></tr>
+    <tr><td>HALT</td><td>stop</td></tr>
+  </table>
+  <p class="cnote">Labels end with <code>:</code>, comments start with <code>;</code>. Numbers: <code>12</code>, <code>0x0C</code>, <code>0b1100</code>. R0–R3, 8-bit values.</p>
+</aside>
+
+<aside class="drawer" id="drawer" aria-label="Program and notes">
+  <div class="dhead"><h2>Program</h2><button class="ib" id="bClose" type="button" aria-label="Close"><svg class="hi" viewBox="0 0 24 24" fill="none" data-icon="close"></svg></button></div>
+  <ol class="prog" id="prog"></ol>
+  <h2>Parts</h2>
+  <div class="legend">
+    <div><b>01 Fetch</b>: PC picks a line of program memory; +1 makes the next address.</div>
+    <div><b>02 Decode</b>: the instruction splits into OP, DR, SA, SB, IMM; the control ROM turns OP into the control word.</div>
+    <div><b>03 Register file</b>: MUX A and MUX B read two registers; the decoder picks the one that loads.</div>
+    <div><b>04 Execute</b>: ALU or shifter; MUX B swaps in the constant.</div>
+    <div><b>05 Memory</b>: LD reads and ST writes at address A.</div>
+    <div><b>06 Write back</b>: MUX D puts the result on Bus D for the destination register.</div>
+    <div style="margin-top:6px">Keys: → step · space run · R reset · 1–4 program · S speed · C code · T theme</div>
+    <div>Icons: Hugeicons (MIT).</div>
+  </div>
+</aside>
+
+<script>
+(() => {
+  // ---------------------------------------------------------------- instruction set (same as the Logisim project)
+  const OPS = ["HALT","MOV","ADD","SUB","AND","OR","XOR","NOT","INC","JMP","SHL","SHR","LDI","LD","ST","BRZ"];
+  const ins = (op, o = {}) => {
+    let w = OPS.indexOf(op) << 12 | (o.dr || 0) << 10 | (o.sa || 0) << 8;
+    w |= o.imm !== undefined ? (o.imm & 255) : (o.sb || 0) << 6;
+    return w;
+  };
+  // ---------------------------------------------------------------- assembler
+  // One instruction per line. Labels end with ":", comments start with ";". Numbers: 12, 0x0C, 0b1100.
+  //   MOV/NOT/INC Rd, Ra   ADD/SUB/AND/OR/XOR Rd, Ra, Rb   SHL/SHR Rd, Rb   LDI Rd, n
+  //   LD Rd, [Ra]   ST [Ra], Rb   JMP label   BRZ Ra, label   HALT
+  const assemble = src => {
+    const lines = src.split("\n"), labels = {}, items = [], errors = [];
+    lines.forEach((raw, ln) => {
+      let t = raw.replace(/;.*$/, "").trim();
+      const m = t.match(/^([A-Za-z_]\w*)\s*:\s*(.*)$/);
+      if (m) { labels[m[1].toLowerCase()] = items.length; t = m[2].trim(); }
+      if (t) items.push({ t, ln: ln + 1 });
+    });
+    const num = (s, ln) => {
+      const k = s.trim().toLowerCase();
+      if (labels[k] !== undefined) return labels[k];
+      const v = /^0x[0-9a-f]+$/.test(k) ? parseInt(k, 16) : /^0b[01]+$/.test(k) ? parseInt(k.slice(2), 2) : /^-?\d+$/.test(k) ? +k : NaN;
+      if (Number.isNaN(v)) { errors.push({ ln, msg: `"${s.trim()}" is not a number or a label` }); return 0; }
+      if (v < -128 || v > 255) errors.push({ ln, msg: `${v} does not fit in 8 bits` });
+      return v & 255;
+    };
+    const reg = (s, ln) => {
+      const m = (s || "").trim().match(/^\[?\s*R([0-3])\s*\]?$/i);
+      if (!m) { errors.push({ ln, msg: `"${(s || "").trim()}" should be a register R0–R3` }); return 0; }
+      return +m[1];
+    };
+    const shape = { HALT: 0, MOV: 2, NOT: 2, INC: 2, ADD: 3, SUB: 3, AND: 3, OR: 3, XOR: 3, SHL: 2, SHR: 2, LDI: 2, LD: 2, ST: 2, JMP: 1, BRZ: 2 };
+    const code = items.map(({ t, ln }) => {
+      const sp = t.search(/\s/), op = (sp < 0 ? t : t.slice(0, sp)).toUpperCase(), rest = sp < 0 ? "" : t.slice(sp + 1);
+      const a = rest.trim() ? rest.split(",").map(x => x.trim()) : [];
+      if (!(op in shape)) { errors.push({ ln, msg: `unknown instruction "${op}"` }); return 0; }
+      if (a.length !== shape[op]) errors.push({ ln, msg: `${op} takes ${shape[op]} operand${shape[op] === 1 ? "" : "s"}` });
+      const o = {};
+      if (["MOV", "NOT", "INC"].includes(op)) { o.dr = reg(a[0], ln); o.sa = reg(a[1], ln); }
+      else if (["ADD", "SUB", "AND", "OR", "XOR"].includes(op)) { o.dr = reg(a[0], ln); o.sa = reg(a[1], ln); o.sb = reg(a[2], ln); }
+      else if (op === "SHL" || op === "SHR") { o.dr = reg(a[0], ln); o.sb = reg(a[1], ln); }
+      else if (op === "LDI") { o.dr = reg(a[0], ln); o.imm = num(a[1] || "", ln); }
+      else if (op === "LD") { o.dr = reg(a[0], ln); o.sa = reg(a[1], ln); }
+      else if (op === "ST") { o.sa = reg(a[0], ln); o.sb = reg(a[1], ln); }
+      else if (op === "JMP") o.imm = num(a[0] || "", ln);
+      else if (op === "BRZ") { o.sa = reg(a[0], ln); o.imm = num(a[1] || "", ln); }
+      return ins(op, o);
+    });
+    if (code.length > 256) errors.push({ ln: lines.length, msg: "the program is longer than 256 lines of memory" });
+    return { code, errors };
+  };
+  const TEMPLATES = [
+    { name: "Add two numbers", about: "LDI · ADD", src: `; R2 = 3 + 4
+        LDI R0, 3
+        LDI R1, 4
+        ADD R2, R0, R1   ; 7
+        HALT` },
+    { name: "Store and load", about: "ST · LD", src: `; write 9 to M[20], then read it back into R2
+        LDI R0, 9
+        LDI R1, 20       ; address
+        ST  [R1], R0     ; M[20] = 9
+        LD  R2, [R1]     ; R2 = 9
+        HALT` },
+    { name: "AND and shift", about: "AND · SHL", src: `; keep the common bits of 12 and 10, then double them
+        LDI R0, 12       ; 0000 1100
+        LDI R1, 10       ; 0000 1010
+        AND R2, R0, R1   ; 0000 1000 = 8
+        SHL R3, R2       ; 0001 0000 = 16
+        HALT` },
+    { name: "Count down 3 → 0", about: "SUB · BRZ · JMP", src: `; a small loop: R0 goes 3, 2, 1, 0
+        LDI R0, 3
+        LDI R1, 1
+loop:   SUB R0, R0, R1
+        BRZ R0, done
+        JMP loop
+done:   HALT` },
+  ];
+  const PROGRAMS = TEMPLATES.map(t => ({ name: t.name, about: t.about, src: t.src, code: assemble(t.src).code }));
+  // control word bits: G 0-3 (Cin,S0,S1,S2) H 4-5, MF 6, MB 7, MD 8, RW 9, MW 10, PL 11, JB 12, HALT 13
+  const RW=1<<9, MF=1<<6, MB=1<<7, MD=1<<8, MW=1<<10, PL=1<<11, JB=1<<12, HL=1<<13;
+  const G = (s2,s1,s0,c) => s2<<3|s1<<2|s0<<1|c;
+  const CW = { HALT:HL, MOV:G(0,0,0,0)|RW, ADD:G(0,0,1,0)|RW, SUB:G(0,1,0,1)|RW, AND:G(1,0,0,0)|RW, OR:G(1,0,1,0)|RW,
+    XOR:G(1,1,0,0)|RW, NOT:G(1,1,1,0)|RW, INC:G(0,0,0,1)|RW, JMP:PL|JB, SHL:2<<4|MF|RW, SHR:1<<4|MF|RW,
+    LDI:MB|MF|RW, LD:MD|RW, ST:MW, BRZ:PL };
+  const hex = (v, n) => v.toString(16).toUpperCase().padStart(n, "0");
+  const decode = w => ({ op: OPS[w >> 12], dr: w >> 10 & 3, sa: w >> 8 & 3, sb: w >> 6 & 3, imm: w & 255 });
+  const asm = w => {
+    const d = decode(w), R = n => "R" + n;
+    switch (d.op) {
+      case "HALT": return "HALT";
+      case "MOV": case "NOT": case "INC": return `${d.op} ${R(d.dr)}, ${R(d.sa)}`;
+      case "SHL": case "SHR": return `${d.op} ${R(d.dr)}, ${R(d.sb)}`;
+      case "LDI": return `LDI ${R(d.dr)}, ${d.imm}`;
+      case "LD": return `LD ${R(d.dr)}, [${R(d.sa)}]`;
+      case "ST": return `ST [${R(d.sa)}], ${R(d.sb)}`;
+      case "JMP": return `JMP ${d.imm}`;
+      case "BRZ": return `BRZ ${R(d.sa)}, ${d.imm}`;
+      default: return `${d.op} ${R(d.dr)}, ${R(d.sa)}, ${R(d.sb)}`;
+    }
+  };
+
+  // ---------------------------------------------------------------- icons (Hugeicons, MIT)
+  const ICONS = {"play": "<path d=\"M18.8906 12.846C18.5371 14.189 16.8667 15.138 13.5257 17.0361C10.296 18.8709 8.6812 19.7884 7.37983 19.4196C6.8418 19.2671 6.35159 18.9776 5.95624 18.5787C5 17.6139 5 15.7426 5 12C5 8.2574 5 6.3861 5.95624 5.42132C6.35159 5.02245 6.8418 4.73288 7.37983 4.58042C8.6812 4.21165 10.296 5.12907 13.5257 6.96393C16.8667 8.86197 18.5371 9.811 18.8906 11.154C19.0365 11.7084 19.0365 12.2916 18.8906 12.846Z\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/>", "pause": "<path d=\"M4 7C4 5.58579 4 4.87868 4.43934 4.43934C4.87868 4 5.58579 4 7 4C8.41421 4 9.12132 4 9.56066 4.43934C10 4.87868 10 5.58579 10 7V17C10 18.4142 10 19.1213 9.56066 19.5607C9.12132 20 8.41421 20 7 20C5.58579 20 4.87868 20 4.43934 19.5607C4 19.1213 4 18.4142 4 17V7Z\" stroke=\"currentColor\" stroke-width=\"1.5\"/><path d=\"M14 7C14 5.58579 14 4.87868 14.4393 4.43934C14.8787 4 15.5858 4 17 4C18.4142 4 19.1213 4 19.5607 4.43934C20 4.87868 20 5.58579 20 7V17C20 18.4142 20 19.1213 19.5607 19.5607C19.1213 20 18.4142 20 17 20C15.5858 20 14.8787 20 14.4393 19.5607C14 19.1213 14 18.4142 14 17V7Z\" stroke=\"currentColor\" stroke-width=\"1.5\"/>", "step": "<path d=\"M15.9351 12.6258C15.6807 13.8374 14.327 14.7077 11.6198 16.4481C8.67528 18.3411 7.20303 19.2876 6.01052 18.9229C5.60662 18.7994 5.23463 18.5823 4.92227 18.2876C4 17.4178 4 15.6118 4 12C4 8.38816 4 6.58224 4.92227 5.71235C5.23463 5.41773 5.60662 5.20057 6.01052 5.07707C7.20304 4.71243 8.67528 5.6589 11.6198 7.55186C14.327 9.29233 15.6807 10.1626 15.9351 11.3742C16.0216 11.7865 16.0216 12.2135 15.9351 12.6258Z\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M20 5V19\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/>", "reset": "<path d=\"M20.4879 15C19.2524 18.4956 15.9187 21 12 21C7.02943 21 3 16.9706 3 12C3 7.02943 7.02943 3 12 3C15.7292 3 18.9286 5.26806 20.2941 8.5\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M15 9H18C19.4142 9 20.1213 9 20.5607 8.56066C21 8.12132 21 7.41421 21 6V3\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/>", "speed": "<path d=\"M13.5 13L17 9M14 15C14 16.1046 13.1046 17 12 17C10.8954 17 10 16.1046 10 15C10 13.8954 10.8954 13 12 13C13.1046 13 14 13.8954 14 15Z\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><path d=\"M6 12C6 8.68629 8.68629 6 12 6C13.0929 6 14.1175 6.29218 15 6.80269\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><path d=\"M2.50006 12.0001C2.50006 7.52172 2.50006 5.28255 3.8913 3.8913C5.28255 2.50006 7.52172 2.50006 12.0001 2.50006C16.4784 2.50006 18.7176 2.50006 20.1088 3.8913C21.5001 5.28255 21.5001 7.52172 21.5001 12.0001C21.5001 16.4784 21.5001 18.7176 20.1088 20.1088C18.7176 21.5001 16.4784 21.5001 12.0001 21.5001C7.52172 21.5001 5.28255 21.5001 3.8913 20.1088C2.50006 18.7176 2.50006 16.4784 2.50006 12.0001Z\" stroke=\"currentColor\" stroke-width=\"1.5\"/>", "cpu": "<path d=\"M4 12C4 8.22876 4 6.34315 5.17157 5.17157C6.34315 4 8.22876 4 12 4C15.7712 4 17.6569 4 18.8284 5.17157C20 6.34315 20 8.22876 20 12C20 15.7712 20 17.6569 18.8284 18.8284C17.6569 20 15.7712 20 12 20C8.22876 20 6.34315 20 5.17157 18.8284C4 17.6569 4 15.7712 4 12Z\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M9.5 2V4\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M14.5 2V4\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M9.5 20V22\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M14.5 20V22\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M13 9L9 13\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M15 13L13 15\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M22 14.5L20 14.5\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M4 9.5L2 9.5\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M4 14.5L2 14.5\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M22 9.5L20 9.5\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/>", "list": "<path d=\"M11 6L21 6\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><path d=\"M11 12L21 12\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><path d=\"M11 18L21 18\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><path d=\"M3 15H4.5C4.77879 15 4.91819 15 5.03411 15.0231C5.51014 15.1177 5.88225 15.4899 5.97694 15.9659C6 16.0818 6 16.2212 6 16.5C6 16.7788 6 16.9182 5.97694 17.0341C5.88225 17.5101 5.51014 17.8823 5.03411 17.9769C4.91819 18 4.77879 18 4.5 18C4.22121 18 4.08181 18 3.96589 18.0231C3.48986 18.1177 3.11775 18.4899 3.02306 18.9659C3 19.0818 3 19.2212 3 19.5V20.4C3 20.6828 3 20.8243 3.08787 20.9121C3.17574 21 3.31716 21 3.6 21H6\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M3 3H4.2C4.36569 3 4.5 3.13431 4.5 3.3V9M4.5 9H3M4.5 9H6\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/>", "info": "<circle cx=\"12\" cy=\"12\" r=\"10\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M12 16V12\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M12.125 8.25H12M12.25 8.25C12.25 8.11193 12.1381 8 12 8C11.8619 8 11.75 8.11193 11.75 8.25C11.75 8.38807 11.8619 8.5 12 8.5C12.1381 8.5 12.25 8.38807 12.25 8.25Z\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/>", "close": "<path d=\"M18 6L6.00081 17.9992M17.9992 18L6 6.00085\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/>", "panel": "<path d=\"M2 12C2 8.3109 2 6.46633 2.81382 5.1588C3.1149 4.67505 3.48891 4.2543 3.91891 3.91557C5.08116 3.00003 6.72077 3.00003 10 3.00003H14C17.2792 3.00003 18.9188 3.00003 20.0811 3.91557C20.5111 4.2543 20.8851 4.67505 21.1862 5.1588C22 6.46633 22 8.3109 22 12C22 15.6892 22 17.5337 21.1862 18.8413C20.8851 19.325 20.5111 19.7458 20.0811 20.0845C18.9188 21 17.2792 21 14 21H10C6.72077 21 5.08116 21 3.91891 20.0845C3.48891 19.7458 3.1149 19.325 2.81382 18.8413C2 17.5337 2 15.6892 2 12Z\" stroke=\"currentColor\" stroke-width=\"1.5\"/><path d=\"M14.5 3.00003L14.5 21\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M18 7.00006H19M18 10.0001H19\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/>"};
+  const setIcon = (svg, name) => { svg.innerHTML = ICONS[name]; svg.dataset.icon = name; };
+  ICONS.code = '<path d="M17 8L18.8398 9.85008C19.6133 10.6279 20 11.0168 20 11.5C20 11.9832 19.6133 12.3721 18.8398 13.1499L17 15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><path d="M7 8L5.16019 9.85008C4.38673 10.6279 4 11.0168 4 11.5C4 11.9832 4.38673 12.3721 5.16019 13.1499L7 15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><path d="M14.5 4L9.5 20" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>';
+  ICONS.chev = '<path d="M18 9.00005C18 9.00005 13.5811 15 12 15C10.4188 15 6 9 6 9" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>';
+  ICONS.sun = '<circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 2V3.5M12 20.5V22M4.93 4.93L5.99 5.99M18.01 18.01L19.07 19.07M2 12H3.5M20.5 12H22M4.93 19.07L5.99 18.01M18.01 5.99L19.07 4.93" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"/>';
+  ICONS.moon = '<path d="M21.5 14.0784C20.3003 14.7189 18.9301 15.0821 17.4751 15.0821C12.7491 15.0821 8.91792 11.2509 8.91792 6.52485C8.91792 5.06986 9.28105 3.69968 9.92163 2.5C5.66765 3.49698 2.5 7.31513 2.5 11.8731C2.5 17.1899 6.8101 21.5 12.1269 21.5C16.6849 21.5 20.503 18.3324 21.5 14.0784Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>';
+  document.querySelectorAll("svg[data-icon]").forEach(s => setIcon(s, s.dataset.icon));
+
+  // ---------------------------------------------------------------- overview drawing
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text !== undefined) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const $ = id => document.getElementById(id);
+  const pts = p => p.map(q => q.join(",")).join(" ");
+  // a wire path with rounded corners: each bend is a small curve instead of a sharp angle
+  const rpath = (p, r = 9) => {
+    let d = `M${p[0][0]} ${p[0][1]}`;
+    for (let i = 1; i < p.length - 1; i++) {
+      const [a, b, c] = [p[i - 1], p[i], p[i + 1]];
+      const l1 = Math.hypot(b[0] - a[0], b[1] - a[1]), l2 = Math.hypot(c[0] - b[0], c[1] - b[1]);
+      const k = Math.min(r, l1 / 2, l2 / 2);
+      if (!l1 || !l2 || !k) { d += ` L${b[0]} ${b[1]}`; continue; }
+      const p1 = [b[0] - (b[0] - a[0]) / l1 * k, b[1] - (b[1] - a[1]) / l1 * k];
+      const p2 = [b[0] + (c[0] - b[0]) / l2 * k, b[1] + (c[1] - b[1]) / l2 * k];
+      d += ` L${p1[0].toFixed(1)} ${p1[1].toFixed(1)} Q${b[0]} ${b[1]} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+    }
+    const z = p[p.length - 1];
+    return d + ` L${z[0]} ${z[1]}`;
+  };
+  const gW = $("oW"), gB = $("oB"), gP = $("oP");
+  // shrink a label until it fits its shape (getBBox is 0 while hidden, then nothing changes)
+  const fitText = (t, maxw, min = 7) => {
+    if (!t) return;
+    t.style.fontSize = "";
+    let w = 0;
+    try { w = t.getBBox().width; } catch (e) { return; }
+    if (!w || w <= maxw) return;
+    const fs = parseFloat(getComputedStyle(t).fontSize) || 12;
+    t.style.fontSize = Math.max(min, fs * maxw / w * 0.97).toFixed(2) + "px";
+  };
+  // fit the viewBox to the drawing, so the whole circuit is always on screen
+  const fitView = (svg, groups, pad = 18) => {
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (const g of groups) {
+      let b; try { b = g.getBBox(); } catch (e) { continue; }
+      if (!b.width && !b.height) continue;
+      x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + b.width); y1 = Math.max(y1, b.y + b.height);
+    }
+    if (x0 < x1) svg.setAttribute("viewBox", `${(x0 - pad).toFixed(1)} ${(y0 - pad).toFixed(1)} ${(x1 - x0 + 2 * pad).toFixed(1)} ${(y1 - y0 + 2 * pad).toFixed(1)}`);
+  };
+  // Signal flow: a thin solid accent line inside the wire that fills from the source to the destination.
+  const flowOn = (ov, ms, delay = 0) => {
+    if (!ov || ov.dataset.on === "1") return;
+    ov.dataset.on = "1";
+    const tok = (ov._tok = (ov._tok || 0) + 1);
+    if (ov._anim) { ov._anim.cancel(); ov._anim = null; }
+    let L = +ov.dataset.len;
+    if (!L) { try { L = ov.getTotalLength(); } catch (e) { L = 0; } ov.dataset.len = String(L || ""); }
+    const finish = () => {
+      if (ov._tok !== tok) return;
+      if (ov._anim) { ov._anim.cancel(); ov._anim = null; }
+      ov.style.strokeDasharray = "none"; ov.style.strokeDashoffset = ""; ov.style.opacity = "1";
+    };
+    // Web Animations on the document timeline: the wave and its delay are timed by the clock,
+    // so a wire, its branches and its bridges stay in step even when timers or frames are throttled.
+    const hasA = !!ov.animate;
+    if (!hasA) { ov.style.opacity = "0"; return void setTimeout(finish, delay + Math.max(0, ms)); }
+    ov.style.opacity = "1";
+    if (!L || ms <= 0) {
+      if (delay <= 0) return finish();
+      ov._anim = ov.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 1, delay, fill: "both" });
+    } else {
+      ov.style.strokeDasharray = `${L} ${L + 1}`;
+      ov.style.strokeDashoffset = String(L);
+      ov._anim = ov.animate([{ strokeDashoffset: L }, { strokeDashoffset: 0 }], { duration: ms, delay, easing: "linear", fill: "both" });
+    }
+    ov._anim.onfinish = finish;
+  };
+  // Signal timing: every net is a tree that starts at its source. A wire that starts on another wire of the
+  // same signal (a branch) begins only when the wave reaches that junction; t0 is that distance from the source.
+  const SPEED_PX = 0.7;  // drawing units per millisecond at 1x
+  const plen = p => p.slice(1).reduce((a, q, i) => a + Math.abs(q[0] - p[i][0]) + Math.abs(q[1] - p[i][1]), 0);
+  const distAlong = (p, q) => {
+    let d = 0;
+    for (let i = 1; i < p.length; i++) {
+      const a = p[i - 1], b = p[i];
+      if (q[0] >= Math.min(a[0], b[0]) && q[0] <= Math.max(a[0], b[0]) && q[1] >= Math.min(a[1], b[1]) && q[1] <= Math.max(a[1], b[1]))
+        return d + Math.abs(q[0] - a[0]) + Math.abs(q[1] - a[1]);
+      d += Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1]);
+    }
+    return null;
+  };
+  const buildTree = list => {
+    list.forEach(w => { w.len = plen(w.p); w.t0 = null; });
+    // a root is a wire whose start does not sit partway along another wire of the same signal
+    list.forEach(w => {
+      const parent = list.some(o => o !== w && o.key === w.key && (distAlong(o.p, w.p[0]) || 0) > 0);
+      if (!parent) w.t0 = 0;
+    });
+    for (let pass = 0; pass < list.length; pass++) {
+      list.forEach(w => {
+        if (w.t0 !== null) return;
+        for (const o of list) {
+          if (o === w || o.key !== w.key || o.t0 === null) continue;
+          const d = distAlong(o.p, w.p[0]);
+          if (d !== null && d > 0) { w.t0 = o.t0 + d; break; }
+        }
+      });
+    }
+    list.forEach(w => { if (w.t0 === null) w.t0 = 0; });
+    // short separate stubs (name tags such as A/B at the gates, or clk at each register) receive the signal
+    // only after it has travelled the main wire of the same signal
+    const isRoot = w => !list.some(o => o !== w && o.key === w.key && (distAlong(o.p, w.p[0]) || 0) > 0);
+    list.forEach(w => {
+      if (w.len >= 40 || !isRoot(w)) return;
+      const mains = list.filter(o => o.key === w.key && o.len >= 40 && isRoot(o));
+      if (mains.length) w.t0 = Math.max(...mains.map(o => o.t0 + o.len));
+    });
+  };
+  const flowOff = ov => {
+    if (!ov) return;
+    ov.dataset.on = "";
+    ov._tok = (ov._tok || 0) + 1;
+    if (ov._anim) { ov._anim.cancel(); ov._anim = null; }
+    ov.style.opacity = "0";
+    ov.style.strokeDasharray = "none";
+    ov.style.strokeDashoffset = "";
+  };
+  // Bridges: where two different signals must cross, the horizontal wire jumps over the vertical one.
+  const findCrossings = list => {
+    const H = [], V = [];
+    list.forEach(w => { for (let i = 1; i < w.p.length; i++) {
+      const a = w.p[i - 1], b = w.p[i];
+      if (a[1] === b[1] && a[0] !== b[0]) H.push({ net: w.net, id: w.id, bus: w.bus, w: w.w || w, y: a[1], x1: Math.min(a[0], b[0]), x2: Math.max(a[0], b[0]) });
+      else if (a[0] === b[0] && a[1] !== b[1]) V.push({ net: w.net, id: w.id, bus: w.bus, w: w.w || w, x: a[0], y1: Math.min(a[1], b[1]), y2: Math.max(a[1], b[1]) });
+    } });
+    const out = [], seen = new Set();
+    for (const h of H) for (const v of V) {
+      if (h.net === v.net) continue;
+      if (v.x > h.x1 + 8 && v.x < h.x2 - 8 && h.y > v.y1 + 8 && h.y < v.y2 - 8) {
+        const k = v.x + "," + h.y;
+        if (!seen.has(k)) { seen.add(k); out.push({ x: v.x, y: h.y, h, v }); }
+      }
+    }
+    return out;
+  };
+  const drawHops = (layer, crossings) => crossings.map(({ x, y, h, v }) => {
+    el("line", { x1: x - 9, y1: y, x2: x + 9, y2: y, class: "hopErase", "stroke-width": h.bus ? 9 : 6 }, layer);
+    el("line", { x1: x, y1: y - 9, x2: x, y2: y + 9, class: "wire" + (v.bus ? " bus" : "") }, layer);
+    const vf = el("line", { x1: x, y1: y - 9, x2: x, y2: y + 9, class: "flow" }, layer);
+    const d = `M${x - 9} ${y} Q${x} ${y - 16} ${x + 9} ${y}`;
+    el("path", { d, class: "wire" + (h.bus ? " bus" : "") }, layer);
+    const hf = el("path", { d, class: "flow" }, layer);
+    const at = o => (o.w.t0 || 0) + (distAlong(o.w.p, [x, y]) || 0);
+    return [{ net: v.id || v.net, el: vf, d: at(v), w: v.w }, { net: h.id || h.net, el: hf, d: at(h), w: h.w }];
+  }).flat();
+
+  // ---- overview: one grid, straight wires; every card = header, value cells, control chips
+  const blk = {}, T = {};
+  // a block: a core in the middle with the content, and separate strips around it, only on the sides that
+  // have something. The top and bottom strips are as wide as the core, the side strips as tall as it; each
+  // strip is as thick as its content plus the same padding. Top: the title. Sides and bottom: ports, flags.
+  const TOPB = 30, GAPB = 8, PADB = 14, CHW = 6.6;
+  const labW = s => (s || "").length * CHW;
+  // ports of one side, spread evenly around the middle of the strip
+  const spread = (n, a0, a1, maxS) => {
+    const c = (a0 + a1) / 2, step = n > 1 ? Math.min(maxS, (a1 - a0 - 2 * PADB - 20) / (n - 1)) : 0;
+    return Array.from({ length: n }, (_, i) => Math.round(c + (i - (n - 1) / 2) * step));
+  };
+  const PORTMAP = [];
+  const card = (id, x, y, w, h, num, title, sp = {}) => {
+    const g = el("g", { class: "blk" }, gB);
+    const thick = side => (sp[side] && sp[side].length ? 2 * PADB + Math.max(...sp[side].map(([, l]) => labW(l))) : 0);
+    const L = thick("l"), R = thick("r");
+    const B = sp.chips ? 22 + 2 * 9 : sp.b && sp.b.length ? 34 : 0;
+    const x0 = x + (L ? L + GAPB : 0), x1 = x + w - (R ? R + GAPB : 0);
+    const y0 = y + TOPB + GAPB, y1 = y + h - (B ? B + GAPB : 0);
+    const strips = el("g", {}, g);
+    const strip = (a0, b0, a1, b1) => el("rect", { x: a0, y: b0, width: a1 - a0, height: b1 - b0, rx: 7, class: "card strip" }, strips);
+    const core = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    el("rect", { x: core.x, y: core.y, width: core.w, height: core.h, rx: 10, class: "card core" }, g);
+    // top: the title, centred on the ports of that edge when it has some, else on the core
+    const tp = sp.t || [];
+    const t = el("text", { x: x0 + core.w / 2, y: y + TOPB / 2 + 5, "text-anchor": "middle", class: "ctitle" }, g);
+    el("tspan", { class: "cnum" }, t, num);
+    el("tspan", { dx: 8 }, t, title);
+    strip(x0, y, x1, y + TOPB);
+    spread(tp.length, x0, x1, 80).forEach((nx, i) => { PORTMAP.push({ old: [tp[i], y], neu: [nx, y], side: "t", idx: i }); port(g, nx, y); });
+    // left and right: one strip around the ports of that side
+    for (const [side, edge] of [["l", x], ["r", x + w]]) {
+      const P = sp[side] || [];
+      if (!P.length) continue;
+      side === "l" ? strip(x, y0, x + L, y1) : strip(x + w - R, y0, x + w, y1);
+      const ny = spread(P.length, y0, y1, 60);
+      P.forEach(([oy, lab], i) => {
+        const py = ny[i];
+        PORTMAP.push({ old: [edge, oy], neu: [edge, py], side, idx: i });
+        port(g, edge, py);
+        el("text", { x: side === "l" ? edge + PADB : edge - PADB, y: py + 4, class: "plab", "text-anchor": side === "l" ? "start" : "end" }, g, lab);
+      });
+    }
+    // bottom: ports with labels, or the control flags
+    g.chips = [];
+    if (sp.chips) {
+      const gap = 6, total = sp.chips.reduce((a, [, cw]) => a + cw, 0) + gap * (sp.chips.length - 1);
+      const cx = x0 + core.w / 2;
+      strip(x0, y + h - B, x1, y + h);
+      let cxs = cx - total / 2;
+      sp.chips.forEach(([lab, cw]) => { g.chips.push(chip(g, cxs, y + h - B + (B - 22) / 2, cw, lab)); cxs += cw + gap; });
+    } else if (B) {
+      strip(x0, y + h - B, x1, y + h);
+    }
+    const bot = [...(sp.b || []), ...(sp.bp || []).map(px => [px, ""])];
+    spread(bot.length, x0, x1, 80).forEach((nx, i) => {
+      const [ox, lab] = bot[i];
+      PORTMAP.push({ old: [ox, y + h], neu: [nx, y + h], side: "b", idx: i });
+      port(g, nx, y + h);
+      if (lab) el("text", { x: nx, y: y + h - 11, class: "plab", "text-anchor": "middle" }, g, lab);
+    });
+    blk[id] = g;
+    g.core = core;
+    g.box = { x0: x, y0: y, x1: x + w, y1: y + h };
+    return g;
+  };
+  // stack rows in the middle of the core
+  const stack = (c, items, gap = 14) => {
+    const H = items.reduce((a, i) => a + i.h, 0) + gap * (items.length - 1);
+    let y = c.y + (c.h - H) / 2;
+    items.forEach(i => { i.draw(y); y += i.h + gap; });
+  };
+  const rowCells = (g, labels, big, out, pad = 16, gap = 8) => ({
+    h: 46, draw: y => {
+      const c = g.core, n = labels.length, w = (c.w - 2 * pad - gap * (n - 1)) / n;
+      labels.forEach((l, k) => out.push(cell(g, c.x + pad + k * (w + gap), y, w, l, big)));
+    },
+  });
+  const rowText = (g, cls, text, set, h = 14, style) => ({
+    h, draw: y => set(el("text", { x: g.core.x + g.core.w / 2, y: y + h - 3, class: cls, "text-anchor": "middle", style }, g, text)),
+  });
+  const port = (g, px, py, side, label) => {
+    el("circle", { cx: px, cy: py, r: 2.6, class: "port" }, g);
+    if (!label) return;
+    const at = { left: [px + 12, py + 4, "start"], right: [px - 12, py + 4, "end"], bottom: [px, py - 10, "middle"] }[side];
+    el("text", { x: at[0], y: at[1], class: "plab", "text-anchor": at[2] }, g, label);
+  };
+  const chip = (g, x, y, w, label) => {
+    const c = el("g", { class: "chip" }, g);
+    el("rect", { x, y, width: w, height: 22, rx: 6 }, c);
+    return { g: c, t: el("text", { x: x + w / 2, y: y + 15, "text-anchor": "middle" }, c, label), w: w - 10 };
+  };
+  // a value cell: small caption on top, value under it (the DECODE look, used everywhere)
+  const cell = (g, x, y, w, label, big) => {
+    const c = el("g", { class: "cellg" }, g);
+    el("rect", { x, y, width: w, height: 46, rx: 6, class: "cell" }, c);
+    el("text", { x: x + w / 2, y: y + 16, class: "mut", "text-anchor": "middle" }, c, label);
+    const v = el("text", { x: x + w / 2, y: y + 37, class: big ? "big cellv" : "txt", "text-anchor": "middle" }, c, "-");
+    return { g: c, v, w: w - 10 };
+  };
+  const muxShape = (id, x, y, w, h, title, ins, ctl) => {
+    const g = el("g", { class: "blk" }, gB);
+    el("polygon", { points: pts([[x, y], [x + w, y + 14], [x + w, y + h - 14], [x, y + h]]), class: "mx" }, g);
+    ins.forEach(([py, lab]) => el("text", { x: x + 8, y: py + 4, class: "mut" }, g, lab));
+    el("text", { x: x + w / 2, y: y - 10, class: "plab", "text-anchor": "middle" }, g, title);
+    T["chip_" + id] = chip(g, x + w / 2 - 28, y + h + 8, 56, ctl);
+    blk[id] = g;
+  };
+
+
+  // 01 FETCH
+  let g = card("fetch", 40, 60, 280, 210, "01", "FETCH", { b: [[100, "TAKEN"], [170, "TARGET"], [260, "IR"]] });
+  { const c = []; stack(g.core, [rowCells(g, ["PC", "IR", "next PC"], false, c),
+      rowText(g, "txt", "", e => (T.fAsm = e)), rowText(g, "mut", "PC → program ROM → IR", () => {}, 12)]);
+    [T.fPC, T.fIR, T.fNext] = c; T.fPC.v.setAttribute("class", "big cellv"); }
+
+  // 02 DECODE + CONTROL
+  g = card("decode", 40, 380, 280, 330, "02", "DECODE + CONTROL", { t: [100, 170, 260], r: [[430, "IMM"], [460, "A"]] });
+  T.irCell = {}; T.sig = {};
+  { const c = [];
+    stack(g.core, [
+      rowText(g, "txt", "", e => (T.irAsm = e)),
+      rowText(g, "mut", "instruction fields", () => {}, 12),
+      rowCells(g, ["OP", "DR", "SA", "SB", "IMM"], false, c, 14, 5),
+      rowText(g, "mut", "control word", () => {}, 12),
+      rowText(g, "big", "0x0000", e => (T.cw = e), 20, "font-size:18px"),
+      { h: 50, draw: y => {
+        const co = g.core, gap = 6, pad = 14, w = (co.w - 2 * pad - 3 * gap) / 4;
+        ["MB", "MF", "MD", "RW", "MW", "PL", "JB", "HALT"].forEach((n, i) => {
+          T.sig[n] = chip(g, co.x + pad + (i % 4) * (w + gap), y + Math.floor(i / 4) * 28, w, n);
+        });
+      } },
+      rowText(g, "mut", "TAKEN = PL · (JB + A = 0)", e => (T.takenEq = e), 12),
+    ], 10);
+    ["OP", "DR", "SA", "SB", "IMM"].forEach((n, i) => { T.irCell[n] = c[i]; }); }
+
+  // 03 REGISTER FILE
+  g = card("regfile", 400, 60, 340, 300, "03", "REGISTER FILE", { l: [[110, "BUS D"]], r: [[140, "A"], [300, "B"]], bp: [580],
+    chips: [["SA", 42], ["SB", 42], ["DR", 42], ["RW", 42]] });
+  { const co = g.core, pad = 16, gap = 10, rh = Math.min(40, (co.h - 2 * pad - 3 * gap) / 4);
+    const y0 = co.y + (co.h - (4 * rh + 3 * gap)) / 2;
+    T.reg = [0, 1, 2, 3].map(k => {
+      const r = el("g", { class: "rrow" }, g), y = y0 + k * (rh + gap);
+      el("rect", { x: co.x + pad, y, width: co.w - 2 * pad, height: rh, rx: 6 }, r);
+      el("text", { x: co.x + pad + 14, y: y + rh / 2 + 4, class: "txt" }, r, "R" + k);
+      const v = el("text", { x: co.x + co.w - pad - 14, y: y + rh / 2 + 6, class: "big", "text-anchor": "end", style: "font-size:16px" }, r, "0");
+      const b = el("text", { x: co.x + co.w / 2, y: y + rh / 2 + 4, class: "bin", "text-anchor": "middle" }, r, "0000 0000");
+      return { g: r, v, b };
+    }); }
+  [T.chip_regfile_SA, T.chip_regfile_SB, T.chip_regfile_DR, T.chip_regfile_RW] = g.chips;
+
+  // 05 DATA MEMORY
+  g = card("mem", 400, 470, 340, 240, "05", "DATA MEMORY", { t: [580], r: [[560, "data in"], [660, "out"]], chips: [["MW", 56]] });
+  { const co = g.core, pad = 16, gap = 10, w = (co.w - 2 * pad - gap) / 2, y0 = co.y + (co.h - (2 * 46 + gap)) / 2;
+    T.mem = [0, 1, 2, 3].map(k => cell(g, co.x + pad + (k % 2) * (w + gap), y0 + Math.floor(k / 2) * (46 + gap), w, "")); }
+  [T.chip_mem_MW] = g.chips;
+
+  // MUX B, 04 ALU, 04 SHIFTER, MUX F, MUX D
+  muxShape("mb", 820, 280, 40, 170, "MUX B", [[300, "0"], [430, "1"]], "MB");
+  g = card("alu", 920, 60, 300, 200, "04", "ALU", { l: [[140, "A"], [200, "B"]], r: [[140, "F"]],
+    chips: [["G", 56], ["C", 36], ["Z", 36], ["N", 36]] });
+  { const c = []; stack(g.core, [rowText(g, "big", "", e => (T.aluOp = e), 20, "font-size:16px"), rowCells(g, ["A", "B", "F"], false, c)]);
+    [T.aA, T.aB, T.aF] = c; }
+  [T.chip_alu_G, T.fC, T.fZ, T.fN] = g.chips;
+  g = card("shf", 920, 300, 300, 150, "04", "SHIFTER", { l: [[365, "B"]], r: [[365, "out"]] });
+  { const c = []; stack(g.core, [rowCells(g, ["B", "H", "out"], false, c), rowText(g, "mut", "", e => (T.shfOp = e), 12)]);
+    [T.sB, T.sH, T.sOut] = c; }
+  T.chip_shf_H = { g: el("g", {}, g), t: el("text", {}, g, ""), w: 40 };
+  muxShape("muxf", 1290, 110, 40, 285, "MUX F", [[140, "0"], [365, "1"]], "MF");
+  muxShape("muxd", 1400, 222, 40, 468, "MUX D", [[252, "0"], [660, "1"]], "MD");
+  // wires: [id, points, bus, label, labelAt]
+  const WIRES = [
+    ["w_taken", [[100, 380], [100, 270]], false, "", null],
+    ["w_imm_f", [[170, 380], [170, 270]], true, "IMM", [188, 318]],
+    ["w_ir", [[260, 270], [260, 380]], true, "", null],
+    ["w_imm_mb", [[320, 430], [820, 430]], true, "IMM", [440, 422]],
+    ["w_a_dec", [[580, 460], [320, 460]], true, "A", [410, 452]],
+    ["w_a", [[740, 140], [920, 140]], true, "A", [836, 118]],
+    ["w_a2", [[580, 360], [580, 470]], true, "addr", [537, 412]],
+    ["w_b", [[740, 300], [820, 300]], true, "B", [792, 292]],
+    ["w_bb_shf", [[860, 365], [920, 365]], true, "", null],
+    ["w_bb_alu", [[860, 365], [890, 365], [890, 200], [920, 200]], true, "BUS B", [896, 290]],
+    ["w_bb_mem", [[860, 365], [890, 365], [890, 560], [740, 560]], true, "", null],
+    ["w_alu_f", [[1220, 140], [1290, 140]], true, "F", [1260, 132]],
+    ["w_shf_f", [[1220, 365], [1290, 365]], true, "", null],
+    ["w_f_d", [[1330, 252], [1400, 252]], true, "", null],
+    ["w_mem_d", [[740, 660], [1400, 660]], true, "MEM OUT", [1010, 652]],
+    ["w_busd", [[1440, 456], [1480, 456], [1480, 24], [370, 24], [370, 110], [400, 110]], true, "BUS D", [880, 16]],
+  ];
+  // a wire end that met a port which moved to the middle of its strip: slide the corner before it, or bend
+  const snapEnd = (p, e, m) => {
+    const ax = m.side === "l" || m.side === "r" ? 1 : 0, pr = 1 - ax, nv = m.neu[ax];
+    if (p[e][ax] === nv) return p;
+    const nb = e === 0 ? 1 : p.length - 2, nb2 = e === 0 ? 2 : p.length - 3;
+    const E = p[e].slice(); E[ax] = nv;
+    if (p.length >= 3 && p[nb][pr] === p[nb2][pr]) {
+      const q = p.map(a => a.slice()); q[nb][ax] = nv; q[e] = E; return q;
+    }
+    const dir = Math.sign(p[nb][pr] - p[e][pr]) || 1, jm = p[e][pr] + dir * (14 + 12 * m.idx);
+    const A = [], Bq = [];
+    A[pr] = jm; A[ax] = p[e][ax]; Bq[pr] = jm; Bq[ax] = nv;
+    return e === 0 ? [E, Bq, A, ...p.slice(1)] : [...p.slice(0, -1), A, Bq, E];
+  };
+  const near2 = (a, b) => Math.abs(a[0] - b[0]) < 1 && Math.abs(a[1] - b[1]) < 1;
+  WIRES.forEach(w => {
+    for (const e of [0, 1]) {
+      const at = e === 0 ? 0 : w[1].length - 1, m = PORTMAP.find(m => near2(m.old, w[1][at]));
+      if (m) w[1] = snapEnd(w[1], at, m);
+    }
+  });
+  // the Bus A branch to DECODE leaves the Bus A wire where that wire now runs
+  { const a2 = WIRES.find(w => w[0] === "w_a2")[1], ad = WIRES.find(w => w[0] === "w_a_dec")[1];
+    const seg = a2.findIndex((q, i) => i && a2[i - 1][0] === q[0] && Math.min(a2[i - 1][1], q[1]) <= ad[0][1] && Math.max(a2[i - 1][1], q[1]) >= ad[0][1]);
+    if (seg > 0) ad[0] = [a2[seg][0], ad[0][1]]; }
+  const OGROUP = { w_bb_alu: "BUSB", w_bb_shf: "BUSB", w_bb_mem: "BUSB", w_a: "A", w_a2: "A", w_a_dec: "A", w_imm_f: "IMM", w_imm_mb: "IMM" };
+  const wireEl = {}, wireLab = {}, WP = {};
+  for (const [id, p, bus, lab, at] of WIRES) {
+    WP[id] = p;
+    wireEl[id] = { base: el("path", { d: rpath(p), class: "wire" + (bus ? " bus" : "") }, gW), ov: el("path", { d: rpath(p), class: "flow" }, gP) };
+    if (lab) wireLab[id] = el("text", { x: at[0], y: at[1], class: "wlab" }, gW, lab);
+  }
+  const OW = WIRES.map(([id, p, bus]) => ({ id, key: OGROUP[id] || id, p, bus }));
+  buildTree(OW);
+  OW.forEach(o => Object.assign(wireEl[o.id], { t0: o.t0, len: o.len }));
+  const oHops = drawHops(el("g", { class: "hops" }, $("over")),
+    findCrossings(OW.map(o => ({ id: o.id, net: o.key, p: o.p, bus: o.bus, w: o }))));
+  const DOTS = [["w_bb_alu", 890, 365], ["w_a_dec", ...WIRES.find(w => w[0] === "w_a_dec")[1][0]]];
+  const dotEl = DOTS.map(([w, x, y]) => ({ w, e: el("circle", { cx: x, cy: y, r: 3.5, class: "jdot" }, gW) }));
+
+  // ---------------------------------------------------------------- machine state
+  let prog = 0, S;
+  const reset = () => {
+    S = { pc: 0, R: [0, 0, 0, 0], M: new Array(256).fill(0), cycle: 0, halted: false, busD: 0, last: null, touched: new Set() };
+    render(null);
+  };
+
+  const exec = () => {
+    const code = PROGRAMS[prog].code;
+    const w = code[S.pc] ?? 0;
+    const d = decode(w), cw = CW[d.op];
+    const g = cw & 15, h = cw >> 4 & 3;
+    const A = S.R[d.sa], regB = S.R[d.sb];
+    const B = cw & MB ? d.imm : regB;
+    const s2 = g >> 3 & 1, s10 = g >> 1 & 3, cin = g & 1;
+    const Y = [0, B, (~B) & 255, 255][s10];
+    const sum = A + Y + (s2 ? 0 : cin);
+    const arith = sum & 255, carry = sum > 255 ? 1 : 0;
+    const logic = [A & B, A | B, A ^ B, (~A) & 255][s10];
+    const alu = s2 ? logic : arith;
+    const shf = [B, B >> 1, (B << 1) & 255, B][h];
+    const F = cw & MF ? shf : alu;
+    const memOut = S.M[A];
+    const D = cw & MD ? memOut : F;
+    const taken = !!(cw & PL) && (!!(cw & JB) || A === 0);
+    const next = taken ? d.imm : (S.pc + 1) & 255;
+    return { w, d, cw, g, h, A, B, regB, alu, carry, shf, F, D, memOut, taken, next };
+  };
+
+  // ---------------------------------------------------------------- phases
+  const R = n => "R" + n;
+  const plan = x => {
+    const { d, cw } = x;
+    const op = d.op;
+    const usesA = ["MOV","ADD","SUB","AND","OR","XOR","NOT","INC","LD","ST","BRZ"].includes(op);
+    const usesB = ["ADD","SUB","AND","OR","XOR","SHL","SHR","ST"].includes(op);
+    const P = [];
+    P.push({ name: "Fetch", blocks: ["pc", "prog", "ir"], wires: ["pc_prog", "prog_ir"], view: "FETCH",
+      nets: { FETCH: ["PC", "IR"] },
+      text: `PC = ${S.pc} selects line ${S.pc} of program memory. Instruction ${hex(x.w, 4)} (${asm(x.w)}) goes into the IR.` });
+    P.push({ name: "Decode", blocks: ["ir", "ctrl", "cw"], wires: ["ir_ctrl", "ctrl_cw"], view: "DECODE_CONTROL",
+      nets: { DECODE_CONTROL: ["IR", "OP", "CW", "G", "H", "MF", "MB", "MD", "RW", "MW", "PL", "JB", "HALT", "DR", "SA", "SB", "IMM", "RUN"] },
+      text: `OP = ${hex(x.w >> 12, 1)} (${op}). The control ROM looks it up and gives control word ${hex(cw, 4)}: ${sigText(cw)}.` });
+    const rw = [], rb = ["muxa", "muxb"].filter((m, i) => (i === 0 ? usesA : usesB));
+    if (usesA) { rw.push("ra" + d.sa); rb.push("r" + d.sa); }
+    if (usesB) { rw.push("rb" + d.sb); rb.push("r" + d.sb); }
+    const rn = [];
+    if (usesA || usesB) rn.push("R0", "R1", "R2", "R3");   // every register sends what it holds; MUX A / B pick
+    if (usesA) rn.push("SA", "A_DATA");
+    if (usesB) rn.push("SB", "B_DATA");
+    P.push({ name: "Read registers", blocks: rb, wires: rw, view: "REGISTER_FILE", nets: { REGISTER_FILE: rn },
+      text: usesA || usesB
+        ? [usesA ? `MUX A reads ${R(d.sa)} = ${x.A} onto Bus A.` : "", usesB ? `MUX B reads ${R(d.sb)} = ${x.regB}.` : ""].join(" ").trim()
+        : "This instruction reads no register." });
+    let ex;
+    if (["MOV","ADD","SUB","AND","OR","XOR","NOT","INC"].includes(op)) {
+      const wires = ["busA_alu", "alu_muxf"], blocks = ["alu", "muxf"];
+      if (usesB) { wires.push("muxb_mb", "mb_alu"); blocks.push("mb"); }
+      ex = { name: "Execute · ALU", blocks, wires,
+        text: `ALU with G = ${bin(x.g, 4)} computes ${aluText(op, x)} = ${x.alu}. MF = 0 picks the ALU.` };
+    } else if (op === "SHL" || op === "SHR") {
+      ex = { name: "Execute · shifter", blocks: ["mb", "shf", "muxf"], wires: ["muxb_mb", "mb_shf", "shf_muxf"],
+        text: `Shifter with H = ${bin(x.h, 2)} shifts ${x.B} ${op === "SHL" ? "left" : "right"} by one: ${x.shf}. MF = 1 picks the shifter.` };
+    } else if (op === "LDI") {
+      ex = { name: "Execute · immediate", blocks: ["mb", "shf", "muxf"], wires: ["imm_mb", "mb_shf", "shf_muxf"],
+        text: `MB = 1 puts the constant IMM = ${d.imm} on Bus B. The shifter passes it through (H = 00) and MF = 1 forwards it.` };
+    } else if (op === "LD") {
+      ex = { name: "Memory · load", blocks: ["mem"], wires: ["busA_mem"],
+        text: `Bus A = ${x.A} is the address. Data memory returns M[${x.A}] = ${x.memOut}.` };
+    } else if (op === "ST") {
+      ex = { name: "Memory · store", blocks: ["mem", "mb"], wires: ["busA_mem", "muxb_mb", "mb_mem"],
+        text: `Address Bus A = ${x.A}, data Bus B = ${x.B}. MW = 1, so M[${x.A}] becomes ${x.B} on the clock edge.` };
+    } else if (op === "BRZ") {
+      ex = { name: "Execute · test", blocks: ["muxa"], wires: ["busA_dec"],
+        text: `BRZ tests Bus A = ${x.A}. ${x.A === 0 ? "It is zero, so the jump is taken." : "Not zero, so the program continues."}` };
+    } else if (op === "JMP") {
+      ex = { name: "Execute · jump", blocks: [], wires: [], text: `JMP sets PL = 1 and JB = 1, so the jump is always taken.` };
+    } else {
+      ex = { name: "Halt", blocks: [], wires: [], text: "HALT = 1 stops the clock from moving the PC. The program is finished." };
+    }
+    if (["MOV","ADD","SUB","AND","OR","XOR","NOT","INC"].includes(op)) {
+      // every part of the ALU works on A and B at once; the MUXes pick which result goes out
+      ex.view = "ALU"; ex.nets = { ALU: ["A", "B", "G", "CI", "S1S0", "S2", "ZERO", "NOT_B", "ONES", "Y", "NOT_S2", "CIN", "ARITH", "C",
+        "L_AND", "L_OR", "L_XOR", "L_NOT", "LOGIC", "F", "Z", "N"] };
+    } else if (op === "SHL" || op === "SHR" || op === "LDI") {
+      // both shifts work on B; MUX H picks one (or B itself for LDI)
+      ex.view = "SHIFTER"; ex.nets = { SHIFTER: ["B", "H", "OUT", "SHL", "SHR"] };
+    } else if (op === "BRZ" || op === "JMP") {
+      ex.view = "DECODE_CONTROL";
+      ex.nets = { DECODE_CONTROL: op === "BRZ" ? ["BUS_A", "ZERO", "A_IS_ZERO", "JB", "PL", "JUMP_OK", "TAKEN"] : ["JB", "PL", "JUMP_OK", "TAKEN"] };
+    } else if (op === "HALT") {
+      ex.view = "DECODE_CONTROL"; ex.nets = { DECODE_CONTROL: ["HALT", "RUN"] };
+    } else { ex.view = "overview"; ex.nets = {}; }
+    P.push(ex);
+    const wb = { name: "Write back", blocks: [], wires: [], text: "", nets: {} };
+    if (cw & RW) wb.nets.REGISTER_FILE = ["BUS_D", "DR", "RW", "D" + d.dr, "LOAD" + d.dr, "R" + d.dr, "CLK"];
+    if (op !== "HALT") wb.nets.FETCH = ["PC_NEXT", "PCa", "CLK", "RUN", "TAKEN"].concat(x.taken ? ["TARGET"] : ["PC_INC", "ONE"]);
+    wb.view = cw & RW ? "REGISTER_FILE" : op === "ST" ? "overview" : op === "HALT" ? "DECODE_CONTROL" : "FETCH";
+    const parts = [];
+    if (cw & RW) {
+      wb.blocks.push("muxd", "dec", "r" + d.dr);
+      wb.wires.push(cw & MD ? "mem_muxd" : "muxf_muxd", "busd", "dec" + d.dr, "tap" + d.dr);
+      parts.push(`MD = ${cw & MD ? 1 : 0} puts ${x.D} on Bus D. The decoder sees DR = ${d.dr} and RW = 1, so ${R(d.dr)} ← ${x.D}.`);
+    }
+    if (cw & MW) { wb.blocks.push("mem"); parts.push(`M[${x.A}] ← ${x.B}.`); }
+    if (op !== "HALT") {
+      if (x.taken) { wb.blocks.push("muxpc", "pc"); wb.wires.push("imm_mux", "mux_pc"); parts.push(`TAKEN = 1, so PC ← IMM = ${d.imm}.`); }
+      else { wb.blocks.push("add", "muxpc", "pc"); wb.wires.push("pc_add", "add_mux", "mux_pc"); parts.push(`PC ← PC + 1 = ${x.next}.`); }
+    }
+    wb.text = parts.join(" ");
+    P.push(wb);
+    return P;
+  };
+  const bin = (v, n) => v.toString(2).padStart(n, "0");
+  const sigText = cw => {
+    const on = [["MB",MB],["MF",MF],["MD",MD],["RW",RW],["MW",MW],["PL",PL],["JB",JB],["HALT",HL]].filter(([, b]) => cw & b).map(([n]) => n);
+    return on.length ? on.join(", ") + " = 1" : "no write signals";
+  };
+  const aluText = (op, x) => ({ MOV: `${x.A}`, ADD: `${x.A} + ${x.B}`, SUB: `${x.A} − ${x.B}`, AND: `${x.A} AND ${x.B}`,
+    OR: `${x.A} OR ${x.B}`, XOR: `${x.A} XOR ${x.B}`, NOT: `NOT ${x.A}`, INC: `${x.A} + 1` })[op];
+
+  // ---------------------------------------------------------------- inside views (same parts and signals as the Logisim file)
+  const VIEWS = [["overview", "Overview"], ["FETCH", "01 Fetch"], ["DECODE_CONTROL", "02 Decode + control"],
+    ["REGISTER_FILE", "03 Register file"], ["ALU", "04 ALU"], ["SHIFTER", "04 Shifter"]];
+  const BITS = new Set(["CLK","RUN","TAKEN","MF","MB","MD","RW","MW","PL","JB","HALT","A_IS_ZERO","JUMP_OK",
+    "D0","D1","D2","D3","LOAD0","LOAD1","LOAD2","LOAD3","CI","S2","NOT_S2","CIN","C","Z","N"]);
+  const WID = { G: 4, S1S0: 2, H: 2, SA: 2, SB: 2, DR: 2, OP: 4 };
+  let view = "overview", lastX = null;
+
+  function aluInternals(x) {
+    const g = x.g, s2 = g >> 3 & 1, s10 = g >> 1 & 3, ci = g & 1;
+    const A = x.A, B = x.B, nb = (~B) & 255, Y = [0, B, nb, 255][s10];
+    const cin = s2 ? 0 : ci, sum = A + Y + cin;
+    const L = [A & B, A | B, A ^ B, (~A) & 255];
+    const F = s2 ? L[s10] : sum & 255;
+    return { s2, s10, ci, nb, Y, cin, arith: sum & 255, c: sum > 255 ? 1 : 0, L, F };
+  }
+  function netValues(part, x) {
+    if (!x) return {};
+    const d = x.d, cw = x.cw, b = v => +!!v;
+    if (part === "FETCH") return { CLK: "clk", RUN: b(!(cw & HL)), TAKEN: b(x.taken), TARGET: d.imm, PC: S.pc, ONE: 1, ZERO: 0,
+      PC_INC: (S.pc + 1) & 255, PC_NEXT: x.next, IR: x.w };
+    if (part === "DECODE_CONTROL") return { IR: x.w, IMM: d.imm, SA: d.sa, DR: d.dr, OP: x.w >> 12, SB: d.sb, CW: cw,
+      G: cw & 15, H: cw >> 4 & 3, MF: b(cw & MF), MB: b(cw & MB), MD: b(cw & MD), RW: b(cw & RW), MW: b(cw & MW), PL: b(cw & PL),
+      JB: b(cw & JB), HALT: b(cw & HL), RUN: b(!(cw & HL)), ZERO: 0, BUS_A: x.A, A_IS_ZERO: b(x.A === 0),
+      JUMP_OK: b((cw & JB) || x.A === 0), TAKEN: b(x.taken) };
+    if (part === "REGISTER_FILE") {
+      const o = { CLK: "clk", BUS_D: x.D, DR: d.dr, RW: b(cw & RW), SA: d.sa, SB: d.sb, A_DATA: x.A, B_DATA: x.regB };
+      for (let k = 0; k < 4; k++) { o["D" + k] = b(d.dr === k); o["LOAD" + k] = b(d.dr === k && cw & RW); o["R" + k] = S.R[k]; }
+      return o;
+    }
+    if (part === "ALU") {
+      const a = aluInternals(x);
+      return { A: x.A, B: x.B, G: x.g, CI: a.ci, S1S0: a.s10, S2: a.s2, ZERO: 0, NOT_B: a.nb, ONES: 255, Y: a.Y, NOT_S2: 1 - a.s2,
+        CIN: a.cin, ARITH: a.arith, C: a.c, L_AND: a.L[0], L_OR: a.L[1], L_XOR: a.L[2], L_NOT: a.L[3], LOGIC: a.L[a.s10],
+        F: a.F, Z: b(a.F === 0), N: a.F >> 7 & 1 };
+    }
+    if (part === "SHIFTER") return { B: x.B, H: x.h, ONE: 1, SHR: x.B >> 1, SHL: (x.B << 1) & 255, OUT: x.shf };
+    return {};
+  }
+
+  const gDW = $("dW"), gDB = $("dB"), gDV = $("dV");
+  let gDF = null, gDH = null, dHops = [], dList = [];
+  let dWires = {}, dVals = [], dSyms = [];
+
+  // Hand-drawn inside views. Same parts and the same signal names as the Logisim circuit.
+  // Wire: [net, points, bus?, labelAt?]. Every symbol lists the nets it touches so it can light up.
+  const SCH = {
+    FETCH: {
+      note: "PC → program memory → IR  ·  next PC = PC + 1, or the jump target when TAKEN = 1",
+      parts: [
+        ["mux", 260, 200, 40, 120, "PC MUX", ["0", "1"], "bottom", ["PC_INC", "TARGET", "TAKEN", "PC_NEXT"]],
+        ["reg", 380, 210, 140, 100, "PC", "PC", ["PC_NEXT", "PC", "RUN", "CLK"], [["D", "left", 50], ["EN", "bottom", 40], ["CLK", "bottom", 80]]],
+        ["box", 560, 70, 100, 70, "ADDER", "PC + 1", ["PC", "ONE", "PC_INC"]],
+        ["const", 540, 105, "1", ["ONE"]],
+        ["box", 700, 180, 160, 160, "PROGRAM MEMORY", "ROM 256 × 16", ["PC", "IR"]],
+      ],
+      pins: [[40, 290, "TARGET (IMM)", "TARGET", "in"], [40, 350, "TAKEN", "TAKEN", "in"], [40, 390, "RUN", "RUN", "in"],
+        [40, 430, "CLK", "CLK", "in"], [940, 260, "IR", "IR", "out"], [940, 410, "PC", "PC", "out"]],
+      wires: [
+        ["TARGET", [[40, 290], [260, 290]], true],
+        ["TAKEN", [[40, 350], [280, 350], [280, 313]]],
+        ["RUN", [[40, 390], [420, 390], [420, 310]]],
+        ["CLK", [[40, 430], [460, 430], [460, 310]]],
+        ["PC_NEXT", [[300, 260], [380, 260]], true],
+        ["PC", [[520, 260], [600, 260]], true, [530, 252], "PCa"],
+        ["PC", [[600, 260], [600, 140]], true, null, "PCa"],
+        ["PC", [[600, 260], [700, 260]], true],
+        ["PC", [[650, 260], [650, 410], [940, 410]], true],
+        ["ONE", [[540, 105], [560, 105]]],
+        ["PC_INC", [[610, 70], [610, 40], [230, 40], [230, 230], [260, 230]], true, [420, 32]],
+        ["IR", [[860, 260], [940, 260]], true, [870, 252]],
+      ],
+    },
+    DECODE_CONTROL: {
+      note: "IR splits into fields · control ROM: OP → control word · TAKEN = PL · (JB + A = 0)",
+      parts: [
+        ["bar", 150, 60, 215, [[80, "11–10 DR"], [110, "9–8 SA"], [140, "7–6 SB"], [170, "7–0 IMM"], [200, "15–12 OP"]], ["IR"]],
+        ["box", 260, 250, 170, 110, "CONTROL ROM", "OP → control word", ["OP", "CW"]],
+        ["bar", 500, 240, 520, [[252, "G"], [280, "H"], [308, "MF"], [336, "MB"], [364, "MD"], [392, "RW"], [420, "MW"], [448, "PL"], [476, "JB"], [504, "HALT"]], ["CW"]],
+        ["box", 590, 525, 70, 45, "= 0 ?", "", ["BUS_A", "ZERO", "A_IS_ZERO"]],
+        ["const", 584, 562, "0", ["ZERO"]],
+        ["or", 720, 466, 44, 40, ["JB", "A_IS_ZERO", "JUMP_OK"]],
+        ["and", 800, 438, 44, 40, ["PL", "JUMP_OK", "TAKEN"]],
+        ["not", 820, 530, 36, 24, ["HALT", "RUN"]],
+      ],
+      pins: [[40, 125, "IR", "IR", "in"], [40, 545, "BUS A", "BUS_A", "in"],
+        [900, 80, "DR", "DR", "out"], [900, 110, "SA", "SA", "out"], [900, 140, "SB", "SB", "out"], [900, 170, "IMM", "IMM", "out"],
+        [900, 252, "G", "G", "out"], [900, 280, "H", "H", "out"], [900, 308, "MF", "MF", "out"], [900, 336, "MB", "MB", "out"],
+        [900, 364, "MD", "MD", "out"], [900, 392, "RW", "RW", "out"], [900, 420, "MW", "MW", "out"], [900, 458, "TAKEN", "TAKEN", "out"],
+        [900, 542, "RUN", "RUN", "out"], [900, 590, "HALT", "HALT", "out"]],
+      wires: [
+        ["IR", [[40, 125], [150, 125]], true],
+        ["OP", [[150, 200], [220, 200], [220, 280], [260, 280]], true, [228, 238]],
+        ["DR", [[150, 80], [900, 80]], true, [600, 74]], ["SA", [[150, 110], [900, 110]], true, [600, 104]],
+        ["SB", [[150, 140], [900, 140]], true, [600, 134]], ["IMM", [[150, 170], [900, 170]], true, [600, 164]],
+        ["CW", [[430, 305], [500, 305]], true, [436, 296]],
+        ...[["G", 252], ["H", 280], ["MF", 308], ["MB", 336], ["MD", 364], ["RW", 392], ["MW", 420]].map(([n, y]) => [n, [[500, y], [900, y]], n === "G" || n === "H", [600, y - 6]]),
+        ["PL", [[500, 448], [800, 448]], false, [600, 442]], ["JB", [[500, 476], [720, 476]], false, [600, 470]],
+        ["HALT", [[500, 504], [530, 504], [530, 590], [900, 590]], false, [600, 584]], ["HALT", [[800, 590], [800, 542], [820, 542]]],
+        ["RUN", [[856, 542], [900, 542]]],
+        ["BUS_A", [[40, 545], [590, 545]], true, [300, 539]], ["ZERO", [[584, 560], [590, 560]], true],
+        ["A_IS_ZERO", [[660, 548], [700, 548], [700, 496], [720, 496]], false, [664, 562]],
+        ["JUMP_OK", [[764, 486], [782, 486], [782, 468], [800, 468]], false, [766, 500]],
+        ["TAKEN", [[844, 458], [900, 458]], false, [846, 452]],
+      ],
+    },
+    REGISTER_FILE: {
+      note: "Write: decoder(DR) AND RW → EN of one register  ·  Read: MUX A (SA) and MUX B (SB)",
+      parts: [
+        ["dec", 150, 140, 60, 160, "DEC 2→4", ["DR", "D0", "D1", "D2", "D3"]],
+        ...[0, 1, 2, 3].map(k => ["and", 280, 125 + 100 * k, 44, 40, ["D" + k, "RW", "LOAD" + k]]),
+        ...[0, 1, 2, 3].map(k => ["reg", 440, 100 + 100 * k, 140, 84, "R" + k, "R" + k, ["BUS_D", "LOAD" + k, "CLK", "R" + k], [["D", "left", 15], ["EN", "left", 45], ["CLK", "bottom", 20]]]),
+        ["bar", 600, 120, 466, [], ["R0", "R1", "R2", "R3"]],
+        ["mux", 650, 120, 56, 140, "MUX A", ["R0–R3"], "top", ["RBUS", "SA", "A_DATA"]],
+        ["mux", 650, 330, 56, 140, "MUX B", ["R0–R3"], "bottom", ["RBUS", "SB", "B_DATA"]],
+      ],
+      pins: [[40, 40, "SA", "SA", "in"], [40, 80, "BUS D", "BUS_D", "in"], [40, 220, "DR", "DR", "in"], [40, 520, "RW", "RW", "in"],
+        [40, 570, "CLK", "CLK", "in"], [40, 620, "SB", "SB", "in"], [940, 190, "A", "A_DATA", "out"], [940, 400, "B", "B_DATA", "out"]],
+      wires: [
+        ["SA", [[40, 40], [678, 40], [678, 130]], true, [300, 32]],
+        ["BUS_D", [[40, 80], [400, 80], [400, 115]], true, [180, 72]],
+        ...[0, 1, 2].map(k => ["BUS_D", [[400, 115 + 100 * k], [400, 215 + 100 * k]], true]),
+        ...[0, 1, 2, 3].map(k => ["BUS_D", [[400, 115 + 100 * k], [440, 115 + 100 * k]], true]),
+        ["DR", [[40, 220], [150, 220]], true],
+        ...[0, 1, 2, 3].map(k => ["D" + k, [[210, 160 + 40 * k], [226 + 8 * k, 160 + 40 * k], [226 + 8 * k, 135 + 100 * k], [280, 135 + 100 * k]]]),
+        ["RW", [[40, 520], [262, 520], [262, 455]], false, [90, 512]],
+        ...[3, 2, 1].map(k => ["RW", [[262, 155 + 100 * k], [262, 55 + 100 * k]]]),
+        ...[0, 1, 2, 3].map(k => ["RW", [[262, 155 + 100 * k], [280, 155 + 100 * k]]]),
+        ...[0, 1, 2, 3].map(k => ["LOAD" + k, [[324, 145 + 100 * k], [440, 145 + 100 * k]], false]),
+        ["CLK", [[40, 570], [460, 570], [460, 484]]],
+        ...[0, 1, 2].map(k => ["CLK", [[460, 192 + 100 * k], [460, 184 + 100 * k]]]),
+        ...[0, 1, 2, 3].map(k => ["R" + k, [[580, 142 + 100 * k], [600, 142 + 100 * k]], true]),
+        ["RBUS", [[600, 190], [650, 190]], true], ["RBUS", [[600, 400], [650, 400]], true],
+        ["SB", [[40, 620], [678, 620], [678, 460]], true, [300, 612]],
+        ["A_DATA", [[706, 190], [940, 190]], true, [800, 182]], ["B_DATA", [[706, 400], [940, 400]], true, [800, 392]],
+      ],
+    },
+    ALU: {
+      note: "S2 = 0 → G = A + Y + Cin, Y = 0 / B / NOT B / 1111 (S1 S0)  ·  S2 = 1 → AND / OR / XOR / NOT A",
+      parts: [
+        ["const", 270, 240, "0x00", ["ZERO"]], ["const", 270, 360, "0xFF", ["ONES"]],
+        ["not", 200, 308, 36, 24, ["B", "NOT_B"]],
+        ["mux", 300, 220, 36, 160, "MUX Y", ["0", "B", "B̄", "1s"], "bottom", ["ZERO", "B", "NOT_B", "ONES", "S1S0", "Y"]],
+        ["box", 600, 100, 100, 110, "ADDER", "A+Y+Cin", ["A", "Y", "CIN", "ARITH", "C"]],
+        ["const", 450, 250, "CI", ["CI"]], ["const", 420, 274, "S2", ["S2"]],
+        ["not", 440, 264, 30, 20, ["S2", "NOT_S2"]],
+        ["and", 520, 240, 44, 44, ["CI", "NOT_S2", "CIN"]],
+        ["and", 470, 396, 44, 40, ["A", "B", "L_AND"]], ["or", 470, 456, 44, 40, ["A", "B", "L_OR"]],
+        ["xor", 470, 516, 44, 40, ["A", "B", "L_XOR"]], ["not", 474, 584, 40, 24, ["A", "L_NOT"]],
+        ...[[406, "A"], [426, "B"], [466, "A"], [486, "B"], [526, "A"], [546, "B"]].map(([y, n]) => ["const", 448, y, n, [n]]),
+        ["const", 452, 596, "A", ["A"]],
+        ["mux", 700, 396, 36, 220, "MUX L", ["0", "1", "2", "3"], "bottom", ["L_AND", "L_OR", "L_XOR", "L_NOT", "S1S0", "LOGIC"]],
+        ["mux", 870, 200, 36, 336, "MUX S2", ["0", "1"], "bottom", ["ARITH", "LOGIC", "S2", "F"]],
+        ["box", 990, 400, 70, 40, "= 0 ?", "", ["F", "Z"]],
+        ["bar", 120, 640, 735, [[655, "0 Cin → CI"], [690, "2–1 S1S0"], [720, "3 S2"]], ["G"]],
+      ],
+      pins: [[120, 120, "A", "A", "in"], [120, 280, "B", "B", "in"], [70, 705, "G", "G", "in"],
+        [1100, 115, "C", "C", "out"], [1100, 260, "N = F[7]", "N", "out"], [1100, 368, "F", "F", "out"], [1100, 420, "Z", "Z", "out"]],
+      wires: [
+        ["A", [[120, 120], [600, 120]], true, [200, 112]],
+        ["B", [[120, 280], [180, 280]], true, [130, 272]], ["B", [[180, 280], [300, 280]], true], ["B", [[180, 280], [180, 320], [200, 320]], true],
+        ["NOT_B", [[236, 320], [300, 320]], true],
+        ["ZERO", [[270, 240], [300, 240]], true], ["ONES", [[270, 360], [300, 360]], true],
+        ["Y", [[336, 300], [370, 300], [370, 170], [600, 170]], true, [376, 162]],
+        ["CI", [[450, 250], [520, 250]]], ["S2", [[420, 274], [440, 274]]],
+        ["NOT_S2", [[470, 274], [520, 274]]],
+        ["CIN", [[564, 262], [620, 262], [620, 210]], false, [626, 240]],
+        ["ARITH", [[700, 170], [760, 170], [760, 230], [870, 230]], true, [706, 162]],
+        ["C", [[700, 115], [1100, 115]], false, [930, 107]],
+        ...[406, 466, 526].map(y => ["A", [[448, y], [470, y]], true]),
+        ...[426, 486, 546].map(y => ["B", [[448, y], [470, y]], true]),
+        ["A", [[452, 596], [474, 596]], true],
+        ["L_AND", [[514, 416], [700, 416]], true], ["L_OR", [[514, 476], [700, 476]], true],
+        ["L_XOR", [[514, 536], [700, 536]], true], ["L_NOT", [[514, 596], [700, 596]], true],
+        ["LOGIC", [[736, 506], [870, 506]], true, [744, 496]],
+        ["F", [[906, 368], [1100, 368]], true, [1030, 360]], ["F", [[970, 368], [970, 420], [990, 420]], true],
+        ["Z", [[1060, 420], [1100, 420]]],
+        ["N", [[1020, 368], [1020, 260], [1100, 260]], false, [1030, 252]],
+        ["G", [[70, 705], [120, 705]], true],
+        ["S1S0", [[120, 690], [318, 690], [318, 373]], true, [200, 682]], ["S1S0", [[318, 690], [718, 690], [718, 609]], true],
+        ["S2", [[120, 720], [888, 720], [888, 529]], false, [400, 712]],
+      ],
+    },
+    SHIFTER: {
+      note: "H = 00 passes B, 01 shifts right by one, 10 shifts left by one (11 also passes B).",
+      parts: [
+        ["box", 300, 220, 110, 60, "SHR", ">> 1", ["B", "SHR"]],
+        ["box", 300, 320, 110, 60, "SHL", "<< 1", ["B", "SHL"]],
+        ["const", 528, 384, "B", ["B"]],
+        ["mux", 560, 150, 40, 260, "MUX H", ["00", "01", "10", "11"], "bottom", ["B", "SHR", "SHL", "H", "OUT"]],
+      ],
+      pins: [[40, 180, "B", "B", "in"], [40, 440, "H", "H", "in"], [820, 280, "OUT", "OUT", "out"]],
+      wires: [
+        ["B", [[40, 180], [200, 180]], true, [100, 172]], ["B", [[200, 180], [560, 180]], true],
+        ["B", [[200, 180], [200, 250]], true], ["B", [[200, 250], [200, 350], [300, 350]], true], ["B", [[200, 250], [300, 250]], true],
+        ["B", [[532, 380], [560, 380]], true],
+        ["SHR", [[410, 250], [480, 250], [480, 240], [560, 240]], true, [416, 242]],
+        ["SHL", [[410, 350], [490, 350], [490, 310], [560, 310]], true, [416, 342]],
+        ["H", [[40, 440], [580, 440], [580, 410]], true, [300, 432]],
+        ["OUT", [[600, 280], [820, 280]], true, [640, 272]],
+      ],
+    },
+  };
+
+  // how many bits a signal has, and its value written in binary in groups of four
+  const bitsOf = net => (net === "IR" || net === "CW" ? 16 : BITS.has(net) ? 1 : WID[net] || 8);
+  const binStr = (v, n) => v.toString(2).padStart(n, "0").replace(/\B(?=(\d{4})+(?!\d))/g, " ");
+  const binOf = (net, v) => (v === "clk" ? "clk" : v === undefined ? "" : binStr(v, bitsOf(net)));
+  const decOf = (net, v) => (v === "clk" || v === undefined || bitsOf(net) === 1 ? "" : bitsOf(net) === 16 ? "0x" + hex(v, 4) : String(v));
+  const BOXW = { 1: 22, 2: 30, 4: 44, 8: 74, 16: 132 };
+  const pinBoxW = net => (net === "CLK" ? 36 : BOXW[bitsOf(net)]);
+  const DECW = { 2: 22, 4: 28, 8: 36, 16: 52 };
+  function buildDetail(name) {
+    const D = SCH[name];
+    gDW.innerHTML = gDB.innerHTML = gDV.innerHTML = "";
+    gDF = el("g", { class: "flows" });
+    gDH = el("g", { class: "hops" });
+    dWires = {}; dVals = []; dSyms = []; dList = [];
+    const svg = $("detail");
+    const sym = (nets, make) => { const g = el("g", { class: "symg" }, gDB); make(g); dSyms.push({ g, nets }); };
+    D.parts.forEach((p, pi) => {
+      const [t] = p;
+      if (t === "box") {
+        const [, x, y, w, h, title, sub, nets] = p;
+        sym(nets, g => {
+          el("rect", { x, y, width: w, height: h, rx: 6, class: "sym" }, g);
+          fitText(el("text", { x: x + w / 2, y: y + h / 2 - (sub ? 3 : -4), class: "slabel", "text-anchor": "middle" }, g, title), w - 14);
+          if (sub) fitText(el("text", { x: x + w / 2, y: y + h / 2 + 14, class: "ssub", "text-anchor": "middle" }, g, sub), w - 14);
+        });
+      } else if (t === "reg") {
+        const [, x, y, w, h, label, net, nets, pins] = p;
+        sym(nets, g => {
+          el("rect", { x, y, width: w, height: h, rx: 6, class: "sym" }, g);
+          // name and value side by side, centred in the room right of the D / EN labels
+          const tt = el("text", { x: x + w / 2 + 12, y: y + h / 2 + 5, "text-anchor": "middle" }, g);
+          el("tspan", { class: "rname" }, tt, label);
+          const v = el("tspan", { class: "sval in", dx: 8 }, tt, "0000 0000");
+          const fo = el("foreignObject", { x: x + 56, y: y + h / 2 - 11, width: w - 62, height: 22, class: "pedit" }, g);
+          const edit = document.createElementNS("http://www.w3.org/1999/xhtml", "input");
+          edit.setAttribute("spellcheck", "false");
+          edit.title = `${label} holds this value (binary) when you try the part alone. Press Run this part to see it work.`;
+          fo.appendChild(edit);
+          pairInputs(name, net, edit, null);
+          dVals.push({ t: v, net, reg: true, si: pi, edit });
+          for (const [name, side, off] of pins) {
+            if (name === "CLK") {
+              const cx = x + off, cy = y + h;
+              el("polygon", { points: pts([[cx - 6, cy], [cx + 6, cy], [cx, cy - 9]]), class: "clk" }, g);
+            } else if (side === "left") el("text", { x: x + 8, y: y + off + 4, class: "ssub" }, g, name);
+            else if (side === "top") el("text", { x: x + off, y: y + 18, class: "ssub", "text-anchor": "middle" }, g, name);
+            else if (side === "bottom") el("text", { x: x + off, y: y + h - 8, class: "ssub", "text-anchor": "middle" }, g, name);
+          }
+        });
+      } else if (t === "mux") {
+        const [, x, y, w, h, label, ins, sel, nets] = p;
+        sym(nets, g => {
+          el("polygon", { points: pts([[x, y], [x + w, y + 14], [x + w, y + h - 14], [x, y + h]]), class: "sym" }, g);
+          const n = ins.length, step = n > 1 ? (h - 40) / (n - 1) : 0;
+          if (n === 1) fitText(el("text", { x: x + w / 2 - 2, y: y + h / 2 + 5, class: "ssub", "text-anchor": "middle" }, g, ins[0]), w - 12);
+          else ins.forEach((s, i) => el("text", { x: x + 4, y: n === 1 ? y + h / 2 + 4 : y + 20 + step * i + 3 + (n === 2 ? 10 * (i ? -1 : 1) : 0), class: "ssub opt" }, g, s));
+          el("text", { x: x + w / 2, y: sel === "top" ? y + h + 14 : y - 6, class: "ssub", "text-anchor": "middle" }, g, label);
+        });
+        // the select signal is the one before the output in the list
+        if (ins.length > 1) Object.assign(dSyms[dSyms.length - 1], { sel: nets[nets.length - 2], opts: [...dSyms[dSyms.length - 1].g.querySelectorAll(".opt")] });
+      } else if (t === "dec") {
+        const [, x, y, w, h, label, nets] = p;
+        sym(nets, g => {
+          el("polygon", { points: pts([[x, y + 14], [x + w, y], [x + w, y + h], [x, y + h - 14]]), class: "sym" }, g);
+          el("text", { x: x + w / 2, y: y - 10, class: "ssub", "text-anchor": "middle" }, g, label);
+          [0, 1, 2, 3].forEach(k => el("text", { x: x + w - 16, y: y + 23 + 40 * k, class: "ssub opt" }, g, String(k)));
+        });
+        Object.assign(dSyms[dSyms.length - 1], { sel: nets[0], opts: [...dSyms[dSyms.length - 1].g.querySelectorAll(".opt")] });
+      } else if (t === "and" || t === "or" || t === "xor") {
+        const [, x, y, w, h, nets] = p;
+        sym(nets, g => {
+          if (t === "and") el("path", { d: `M${x} ${y}H${x + w / 2}A${w / 2} ${h / 2} 0 0 1 ${x + w / 2} ${y + h}H${x}Z`, class: "sym" }, g);
+          else {
+            el("path", { d: `M${x} ${y}Q${x + w * .6} ${y} ${x + w} ${y + h / 2}Q${x + w * .6} ${y + h} ${x} ${y + h}Q${x + w * .32} ${y + h / 2} ${x} ${y}Z`, class: "sym" }, g);
+            if (t === "xor") el("path", { d: `M${x - 6} ${y}Q${x + w * .32 - 6} ${y + h / 2} ${x - 6} ${y + h}`, class: "sym", fill: "none" }, g);
+          }
+          el("text", { x: x + w / 2 - 4, y: y + h / 2 + 3, class: "ssub", "text-anchor": "middle" }, g, t.toUpperCase());
+        });
+      } else if (t === "not") {
+        const [, x, y, w, h, nets] = p;
+        sym(nets, g => {
+          el("polygon", { points: pts([[x, y], [x + w - 6, y + h / 2], [x, y + h]]), class: "sym" }, g);
+          el("circle", { cx: x + w - 3, cy: y + h / 2, r: 3, class: "sym" }, g);
+        });
+      } else if (t === "bar") {
+        const [, x, y1, y2, taps, nets] = p;
+        sym(nets, g => {
+          el("line", { x1: x, y1, x2: x, y2, class: "spine" }, g);
+          taps.forEach(([y, s]) => el("text", { x: x + 6, y: y - 4, class: "ssub" }, g, s));
+        });
+      } else if (t === "const") {
+        const [, x, y, s, nets] = p;
+        sym(nets, g => el("text", { x: x - 4, y: y + 4, class: "ssub", "text-anchor": "end" }, g, s));
+      }
+    });
+    D.pins.forEach(([x, y, label, net, dir], pinIdx) => {
+      const g = el("g", {}, gDB);
+      const inp = dir === "in";
+      el("polygon", { points: pts(inp ? [[x - 12, y - 6], [x - 2, y - 6], [x + 3, y], [x - 2, y + 6], [x - 12, y + 6]]
+        : [[x, y - 6], [x + 10, y - 6], [x + 15, y], [x + 10, y + 6], [x, y + 6]]), class: "sym" }, g);
+      // two value boxes beside the pin: binary, and decimal (hex for 16 bits). Input: [name][dec][bin]▶  Output: ▶[bin][dec][name]
+      const bits = bitsOf(net), two = bits > 1 && net !== "CLK", editable = inp && net !== "CLK";
+      const bw = pinBoxW(net), dw = two ? DECW[bits] : 0, gap = two ? 14 : 0;
+      const bx = inp ? x - 18 - bw : x + 20, dx = inp ? bx - gap - dw : bx + bw + gap;
+      const box = el("rect", { x: bx, y: y - 11, width: bw, height: 22, rx: 5, class: "pbox" }, g);
+      const val = el("text", { x: bx + bw / 2, y: y + 4, class: editable ? "pval in" : "pval", "text-anchor": "middle" }, g, "");
+      let dbox = null, dval = null;
+      if (two) {
+        dbox = el("rect", { x: dx, y: y - 11, width: dw, height: 22, rx: 5, class: "pbox dec" }, g);
+        dval = el("text", { x: dx + dw / 2, y: y + 4, class: editable ? "pval in" : "pval", "text-anchor": "middle" }, g, "");
+        el("text", { x: (inp ? dx + dw : bx + bw) + gap / 2, y: y + 4, class: "peq", "text-anchor": "middle" }, g, "=");
+      }
+      const edge = inp ? (two ? dx : bx) - 8 : (two ? dx + dw : bx + bw) + 8;
+      const t = el("text", { x: edge, y: y + 4, class: "ssub", "text-anchor": inp ? "end" : "start" }, g, label);
+      let edit = null, dedit = null;
+      if (editable) {
+        const mk = (ex, ew, kind) => {
+          const fo = el("foreignObject", { x: ex, y: y - 11, width: ew, height: 22, class: "pedit" }, g);
+          const e = document.createElementNS("http://www.w3.org/1999/xhtml", "input");
+          e.setAttribute("spellcheck", "false");
+          e.title = `${label} in ${kind}. Type a value; the other box follows. Press Run this part to see it work.`;
+          fo.appendChild(e);
+          return e;
+        };
+        edit = mk(bx, bw, "binary");
+        if (two) dedit = mk(dx, dw, bits === 16 ? "hex" : "decimal");
+        pairInputs(name, net, edit, dedit);
+      }
+      dVals.push({ t, box, val, dbox, dval, edit, dedit, net, label, dir, pi: pinIdx });
+    });
+    for (const [n, p, bus, lab, alias] of D.wires) {
+      const pl = el("path", { d: rpath(p), class: "wire" + (bus ? " bus" : ""), "data-net": n }, gDW);
+      const ov = el("path", { d: rpath(p), class: "flow" }, gDF);
+      const entry = { el: pl, ov, p, lab, key: n, bus, alias };
+      (dWires[n] = dWires[n] || []).push(entry);
+      dList.push(entry);
+      // junction dots where a branch starts on another wire of the same net
+      const s = p[0];
+      if ((dWires[n] || []).length > 1 && dWires[n].some(o => o.el !== pl && onPath(o.p, s))) el("circle", { cx: s[0], cy: s[1], r: 3, class: "dot", "data-net": n }, gDW);
+    }
+  }
+  // every inside view uses the same box (the largest drawing), so parts keep one size from view to view
+  const bboxOf = groups => {
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (const g of groups) { let b; try { b = g.getBBox(); } catch (e) { continue; } if (!b.width && !b.height) continue;
+      x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + b.width); y1 = Math.max(y1, b.y + b.height); }
+    return x0 < x1 ? { x0, y0, x1, y1 } : null;
+  };
+  let common = null;
+  const measureAll = () => {
+    const board = $("detailBoard"), was = board.hidden;
+    board.hidden = false; board.style.visibility = "hidden";
+    let W = 0, H = 0;
+    for (const v in SCH) { buildDetail(v); const b = bboxOf([gDW, gDB, gDV]); if (b) { W = Math.max(W, b.x1 - b.x0); H = Math.max(H, b.y1 - b.y0); } }
+    gDW.innerHTML = gDB.innerHTML = gDV.innerHTML = "";
+    board.hidden = was; board.style.visibility = "";
+    common = { W: W + 52, H: H + 52 };
+  };
+  function fitDetail() {
+    if (gDF && gDF.parentNode !== gDW) gDW.appendChild(gDF);
+    if (gDH && gDH.parentNode !== gDW) gDW.appendChild(gDH);
+    const b = bboxOf([gDW, gDB, gDV]);
+    if (!b) return;
+    if (!common) measureAll(), setView(view, false);
+    const W = Math.max(common.W, b.x1 - b.x0 + 52), H = Math.max(common.H, b.y1 - b.y0 + 52);
+    const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+    $("detail").setAttribute("viewBox", `${(cx - W / 2).toFixed(1)} ${(cy - H / 2).toFixed(1)} ${W.toFixed(1)} ${H.toFixed(1)}`);
+  }
+  // Put each active value next to its own wire, in the first spot that touches no text, wire or shape edge.
+  function placeLabels(vals, act) {
+    const tight = b => ({ x: b.x, y: b.y + b.height * 0.2, w: b.width, h: b.height * 0.62 });
+    const bb = e => { try { return tight(e.getBBox()); } catch (er) { return null; } };
+    const inter = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    const inside = (a, b) => a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h;
+    const shown = new Set(dVals.map(o => o.net));
+    const nets = [...act].filter(n => vals[n] !== undefined && !shown.has(n) && n !== "CLK" && dWires[n]);
+    if (!nets.length) return;
+    const texts = [...$("detail").querySelectorAll("text")].map(bb).filter(b => b && b.w);
+    if (!texts.length) return;
+    const shapes = [...gDB.querySelectorAll("rect, polygon, path.sym")].map(e => { try { const b = e.getBBox(); return { x: b.x, y: b.y, w: b.width, h: b.height }; } catch (er) { return null; } }).filter(Boolean);
+    const segs = [];
+    for (const k in dWires) dWires[k].forEach(o => { for (let i = 1; i < o.p.length; i++) segs.push([o.p[i - 1], o.p[i]]); });
+    const hitSeg = r => segs.some(([a, b]) => (a[0] === b[0] ? a[0] > r.x && a[0] < r.x + r.w && Math.max(a[1], b[1]) > r.y && Math.min(a[1], b[1]) < r.y + r.h
+      : a[1] > r.y && a[1] < r.y + r.h && Math.max(a[0], b[0]) > r.x && Math.min(a[0], b[0]) < r.x + r.w));
+    const score = r => texts.filter(t => inter(r, t)).length * 4 + (hitSeg(r) ? 3 : 0) + shapes.filter(s => inter(r, s) && !inside(r, s)).length * 3
+      + shapes.filter(s => inside(r, s)).length * 2;
+    for (const n of nets) {
+      // the wire's value in binary, like the boxes; the decimal is in its tooltip
+      const t = el("text", { class: "nval", x: 0, y: 0 }, gDV, `${n} = ${binOf(n, vals[n])}`);
+      const dv = decOf(n, vals[n]);
+      if (dv) el("title", {}, t, `${n} = ${dv}`);
+      let best = null;
+      const hint = dWires[n].find(o => o.lab);
+      if (hint) {
+        t.setAttribute("x", hint.lab[0]); t.setAttribute("y", hint.lab[1]); t.setAttribute("text-anchor", "start");
+        const r = bb(t);
+        if (r && score(r) === 0) best = { sc: 0, cx: hint.lab[0], cy: hint.lab[1], an: "start", r };
+      }
+      if (!best) for (const o of dWires[n]) for (let i = 1; i < o.p.length; i++) {
+        const [a, b] = [o.p[i - 1], o.p[i]], horiz = a[1] === b[1], len = Math.abs(horiz ? b[0] - a[0] : b[1] - a[1]);
+        if (len < 16) continue;
+        for (const f of [0.5, 0.3, 0.7, 0.2, 0.8, 0.4, 0.6, 0.1, 0.9]) {
+          const x = a[0] + (b[0] - a[0]) * f, y = a[1] + (b[1] - a[1]) * f;
+          const cands = horiz ? [[x, y - 7, "middle"], [x, y + 17, "middle"], [x, y - 19, "middle"], [x, y + 29, "middle"]]
+            : [[x + 8, y + 4, "start"], [x - 8, y + 4, "end"], [x + 8, y - 10, "start"], [x - 8, y - 10, "end"]];
+          for (const [cx, cy, an] of cands) {
+            t.setAttribute("x", cx); t.setAttribute("y", cy); t.setAttribute("text-anchor", an);
+            const r = bb(t); if (!r) continue;
+            const sc = score(r);
+            if (!best || sc < best.sc) best = { sc, cx, cy, an, r };
+            if (sc === 0) break;
+          }
+          if (best && best.sc === 0) break;
+        }
+        if (best && best.sc === 0) break;
+      }
+      if (!best || best.sc >= 3) { t.remove(); continue; }
+      t.setAttribute("x", best.cx); t.setAttribute("y", best.cy); t.setAttribute("text-anchor", best.an);
+      texts.push(best.r);
+    }
+  }
+  function onPath(p, q) {
+    for (let i = 1; i < p.length; i++) {
+      const [a, b] = [p[i - 1], p[i]];
+      if (q[0] >= Math.min(a[0], b[0]) && q[0] <= Math.max(a[0], b[0]) && q[1] >= Math.min(a[1], b[1]) && q[1] <= Math.max(a[1], b[1])) return true;
+    }
+    return false;
+  }
+  function setView(v, byUser) {
+    view = v;
+    if (byUser) $("follow").checked = false;
+    $("tabs").querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.v === v)));
+    $("overBoard").hidden = v !== "overview";
+    $("detailBoard").hidden = v === "overview";
+    if (v !== "overview") {
+      buildDetail(v); gDW.appendChild(gDF); gDW.appendChild(gDH);
+      buildTree(dList);
+      dHops = drawHops(gDH, findCrossings(dList.map(e => ({ net: e.key, p: e.p, bus: e.bus, w: e }))));
+      playDetail(); fitDetail();
+    }
+  }
+  VIEWS.slice().reverse().forEach(([v, label]) => {
+    const b = document.createElement("button");
+    b.className = "tab"; b.type = "button"; b.dataset.v = v; b.textContent = label; b.setAttribute("role", "tab");
+    b.addEventListener("click", () => setView(v, true));
+    $("tabs").prepend(b);
+  });
+  // ---------------------------------------------------------------- event-driven timing
+  // Every element starts working the moment the last input it needs has arrived, then sends its outputs on.
+  // Nothing waits for anything it is not connected to. Times are in drawing units (travel distance); GATE is
+  // the short time an element takes to pass its inputs on.
+  const GATE = 50;
+  const TAG_DEP = { CI: "G" };  // a name tag with no wire of its own comes from this signal
+  const inBox = (b, q, m = 4) => q[0] >= b.x0 - m && q[0] <= b.x1 + m && q[1] >= b.y0 - m && q[1] <= b.y1 + m;
+  const near = (a, b) => Math.abs(a[0] - b[0]) <= 3 && Math.abs(a[1] - b[1]) <= 3;
+  const symBox = p => {
+    if (p[0] === "bar") return { x0: p[1] - 3, y0: p[2], x1: p[1] + 3, y1: p[3] };
+    if (p[0] === "const") return { x0: p[1] - 34, y0: p[2] - 9, x1: p[1] + 3, y1: p[2] + 9 };
+    return { x0: p[1], y0: p[2], x1: p[1] + p[3], y1: p[2] + p[4] };
+  };
+  const NETS_AT = { box: 7, reg: 7, mux: 8, dec: 6, bar: 5, const: 4 };
+  const symNets = p => p[NETS_AT[p[0]] ?? 5];
+  const withParents = E => E.forEach(e => { e.parent = E.find(o => o !== e && o.key === e.key && (distAlong(o.p, e.p[0]) || 0) > 0) || null; });
+  const rootOf = e => { let r = e, k = 0; while (r.parent && k++ < 60) r = r.parent; return r; };
+
+  // Generic solver over one drawing: E = wires {i,key,p,len,t0,parent}, sig[i] = active signal or null,
+  // driverOf(root) → { src: true } | { box: i } | { tap: entry } | { dep: net }, ins[box] = entries that end in it.
+  function solve(E, sig, driverOf, insOf, delayOf, isState, srcT = 0) {
+    const T = new Map();
+    const act = i => sig[i] !== null;
+    const entStart = e => { const r = rootOf(e); return T.has(r.i) ? T.get(r.i) + (e.t0 - r.t0) : null; };
+    const arr = e => { const s = entStart(e); return s === null ? null : s + e.len; };
+    const readyOf = (b, except) => {
+      const ins = insOf(b).filter(e => act(e.i) && sig[e.i] !== except);
+      let t = 0;
+      for (const e of ins) { const a = arr(e); if (a === null) return null; t = Math.max(t, a); }
+      return { t, n: ins.length };
+    };
+    const roots = E.filter(e => !e.parent && act(e.i));
+    const tryRoot = r => {
+      if (r.t0 > 0) {  // name tag: the signal reaches it after travelling its main wire
+        const mains = E.filter(m => m.key === r.key && !m.parent && m.t0 === 0 && act(m.i));
+        if (mains.some(m => !T.has(m.i))) return null;
+        return mains.length ? Math.max(...mains.map(m => T.get(m.i) + m.len)) : srcT;
+      }
+      const d = driverOf(r);
+      if (d.src) return srcT;
+      if (d.tap) {
+        if (!act(d.tap.i)) return srcT;
+        const s = entStart(d.tap);
+        return s === null ? null : s + (distAlong(d.tap.p, r.p[0]) || 0);
+      }
+      if (d.dep) {
+        const de = E.filter(e => e.key === d.dep && act(e.i));
+        if (!de.length) return srcT;
+        const a = de.map(arr);
+        return a.some(x => x === null) ? null : Math.max(...a) + GATE;
+      }
+      const rd = readyOf(d.box, sig[r.i]);
+      if (!rd) return null;
+      return rd.t + delayOf(d.box, rd.n);
+    };
+    for (let guard = 0; guard < 400; guard++) {
+      let moved = false;
+      for (const r of roots) if (!T.has(r.i)) { const t = tryRoot(r); if (t !== null) { T.set(r.i, t); moved = true; } }
+      if (roots.every(r => T.has(r.i))) break;
+      if (moved) continue;
+      // a loop: state elements (registers) send their stored value at once; otherwise just release one
+      const st = roots.filter(r => !T.has(r.i) && isState(r));
+      (st.length ? st : [roots.find(r => !T.has(r.i))]).forEach(r => T.set(r.i, srcT));
+    }
+    return { entStart, arr, readyOf, T, roots };
+  }
+
+  const GEO = {};
+  const geoOf = v => {
+    if (GEO[v]) return GEO[v];
+    const D = SCH[v];
+    const E = D.wires.map(([key, p, bus, lab, alias], i) => ({ i, key, p, alias }));
+    buildTree(E); withParents(E);
+    const syms = D.parts.map((p, i) => ({ i, type: p[0], box: symBox(p), nets: symNets(p) || [],
+      konst: p[0] === "const" && /^(0x[0-9a-f]+|\d+)$/i.test(p[3]) }));
+    const pins = D.pins.map(([x, y, label, net, dir], i) => ({ i, q: [x, y], net, dir }));
+    const ends = syms.map(s => E.filter(e => inBox(s.box, e.p[e.p.length - 1]) && !inBox(s.box, e.p[0], 0)));
+    const drv = E.map(e => {
+      if (e.parent) return null;
+      const q = e.p[0];
+      if (pins.some(p => p.dir === "in" && near(p.q, q))) return { src: true };
+      const c = syms.filter(s => inBox(s.box, q));
+      const s = c.find(s => s.nets.includes(e.key)) || c[0];
+      if (s) {
+        if (s.type === "const" && !s.konst && TAG_DEP[e.key]) return { dep: TAG_DEP[e.key] };
+        if (s.type === "const") return { src: true };
+        return { box: s.i };
+      }
+      const tap = E.find(o => o !== e && o.key !== e.key && onPath(o.p, q));
+      return tap ? { tap } : { src: true };
+    });
+    return (GEO[v] = { E, syms, pins, ends, drv });
+  };
+  const sigOf = (e, act) => act.has(e.key) ? e.key : e.alias && act.has(e.alias) ? e.alias : null;
+
+  // A signal reaches every part on its wire, and every part works on what reaches it. Only a MUX chooses:
+  // it passes the input its select picks, so its output waits for that input and the select, not the others.
+  function muxIgnored(G, part, vals) {
+    const skip = new Set();
+    if (!vals) return skip;
+    G.syms.forEach((s, si) => {
+      const p = SCH[part].parts[si];
+      if (!p || p[0] !== "mux" || p[6].length < 2) return;
+      const [, x, y, w, h, , ins, , nets] = p, n = ins.length, sel = vals[nets[nets.length - 2]];
+      if (typeof sel !== "number") return;
+      const step = (h - 40) / (n - 1);
+      const ys = ins.map((_, i) => y + 20 + step * i + (n === 2 ? 10 * (i ? -1 : 1) : 0));
+      G.ends[si].forEach(e => {
+        const q = e.p[e.p.length - 1];
+        if (Math.abs(q[0] - x) > 3) return;   // the select line comes in from the top or bottom
+        const k = ys.reduce((b, yy, i) => (Math.abs(yy - q[1]) < Math.abs(ys[b] - q[1]) ? i : b), 0);
+        if (k !== sel) skip.add(e.i);
+      });
+    });
+    return skip;
+  }
+  function schedDetail(v, act, hold = 0, vals = null) {
+    const G = geoOf(v), E = G.E;
+    const sig = E.map(e => sigOf(e, act));
+    const ign = muxIgnored(G, v, vals);
+    const R = solve(E, sig, r => G.drv[r.i], b => G.ends[b].filter(e => !ign.has(e.i)), (b, n) => (n ? GATE : hold), r => G.drv[r.i].box !== undefined && G.syms[G.drv[r.i].box].type === "reg", hold);
+    const entStart = E.map(e => (sig[e.i] === null ? null : R.entStart(e)));
+    const out = { entStart, wires: [], symOn: [], symReady: [], pinOn: [], pinHold: [], keyStart: new Map(), end: 0 };
+    E.forEach(e => {
+      const t = entStart[e.i];
+      if (t === null) return;
+      out.wires.push({ i: e.i, t, len: e.len });
+      out.end = Math.max(out.end, t + e.len);
+      if (!out.keyStart.has(e.key) || out.keyStart.get(e.key) > t) out.keyStart.set(e.key, t);
+    });
+    G.syms.forEach(s => {
+      const rd = R.readyOf(s.i, null);
+      const outs = R.roots.filter(r => G.drv[r.i].box === s.i).map(r => R.T.get(r.i));
+      let on = null;
+      if (rd && rd.n) on = rd.t;
+      if (outs.length) on = on === null ? Math.min(...outs) : Math.min(on, ...outs);
+      out.symOn[s.i] = on;
+      out.symReady[s.i] = rd && rd.n ? rd.t : null;
+    });
+    G.pins.forEach(p => {
+      let t = null;
+      E.forEach(e => {
+        if (entStart[e.i] === null) return;
+        if (p.dir === "in" && near(e.p[0], p.q)) t = t === null ? entStart[e.i] : Math.min(t, entStart[e.i]);
+        if (p.dir === "out" && near(e.p[e.p.length - 1], p.q)) t = Math.max(t ?? 0, entStart[e.i] + e.len);
+      });
+      out.pinOn[p.i] = t;
+      // an input shows its value before the wave leaves; an output shows it once the wave has arrived
+      if (t !== null && hold) out.pinHold[p.i] = p.dir === "in" ? [0, t] : [t, t + hold];
+      if (t !== null && p.dir === "in") out.pinOn[p.i] = 0;
+    });
+    if (out.wires.length) out.end += hold;
+    // a source element (a register sending what it holds) lights when its value sets off;
+
+    return out;
+  }
+
+  // overview: cards and multiplexers are the elements, the wires between them carry the signals
+  const OE = OW.map((o, i) => Object.assign(o, { i }));
+  withParents(OE);
+  let OBOX = null;
+  const oBoxes = () => OBOX || (OBOX = Object.keys(blk).map(id => {
+    const g = blk[id], r = g.querySelector("rect.card");
+    if (g.box) return { id, box: g.box };
+    if (r) { const x = +r.getAttribute("x"), y = +r.getAttribute("y"); return { id, box: { x0: x, y0: y, x1: x + +r.getAttribute("width"), y1: y + +r.getAttribute("height") } }; }
+    const n = (g.querySelector("polygon").getAttribute("points").match(/-?[\d.]+/g) || []).map(Number);
+    const xs = n.filter((_, k) => k % 2 === 0), ys = n.filter((_, k) => k % 2 === 1);
+    return { id, box: { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) } };
+  }));
+  function schedOver(ws, partEnd, hold = 0) {
+    const B = oBoxes(), on = new Set(ws);
+    const sig = OE.map(e => (on.has(e.id) ? e.key : null));
+    const boxAt = q => B.findIndex(b => inBox(b.box, q));
+    const ends = B.map(b => OE.filter(e => inBox(b.box, e.p[e.p.length - 1]) && !inBox(b.box, e.p[0], 0)));
+    const delay = (bi, n) => partEnd[B[bi].id] !== undefined ? partEnd[B[bi].id] : n ? GATE : hold;
+    const R = solve(OE, sig, r => { const b = boxAt(r.p[0]); return b < 0 ? { src: true } : { box: b }; }, b => ends[b], delay, () => true, hold);
+    const out = { entStart: {}, wires: [], blockOn: {}, cardReady: {}, end: 0 };
+    OE.forEach(e => {
+      if (sig[e.i] === null) return;
+      const t = R.entStart(e);
+      out.entStart[e.id] = t;
+      out.wires.push({ id: e.id, t, len: e.len });
+      out.end = Math.max(out.end, t + e.len);
+    });
+    B.forEach((b, bi) => {
+      const rd = R.readyOf(bi, null);
+      const drives = R.roots.some(r => boxAt(r.p[0]) === bi);
+      out.cardReady[b.id] = rd ? rd.t : 0;
+      if (rd && rd.n) out.blockOn[b.id] = rd.t;
+      else if (drives || partEnd[b.id] !== undefined) out.blockOn[b.id] = 0;
+      if (partEnd[b.id] !== undefined) out.end = Math.max(out.end, out.cardReady[b.id] + partEnd[b.id]);
+    });
+    if (out.wires.length) out.end += hold;
+    return out;
+  }
+
+  // the stage being played: when it started, its speed and every schedule
+  let cur = null, oTimers = [], dTimers = [];
+  // the play clock: it runs at the chosen speed (1 = normal), stops while paused, and the speed can change at any moment
+  const clk = { base: 0, start: performance.now(), paused: false, rate: 1 };
+  const simNow = () => (clk.paused ? clk.base : clk.base + (performance.now() - clk.start) * clk.rate);
+  const flowAnims = () => document.getAnimations().filter(a => a.effect && a.effect.target && a.effect.target.classList && a.effect.target.classList.contains("flow"));
+  const freeze = () => { if (clk.paused) flowAnims().forEach(a => a.pause()); };
+  const clearTimers = list => { list.forEach(clearTimeout); list.length = 0; };
+  const timeline = (list, base) => {
+    const v = cur.v, el = simNow() - cur.t0;
+    const ms = u => (v ? ((base + u) / v - el) / clk.rate : -1);
+    // while paused only what has already happened is shown; the rest is set again on continue
+    const at = (u, fn) => { const m = ms(u); if (m <= 0) fn(); else if (!clk.paused) list.push(setTimeout(fn, m)); };
+    return { ms, at, v: v * clk.rate };
+  };
+  function applyOver(ph) {
+    clearTimers(oTimers);
+    const o = cur.over, { ms, at, v } = timeline(oTimers, 0);
+    o.wires.forEach(w => {
+      flowOn(wireEl[w.id].ov, v ? w.len / v : 0, ms(w.t));
+      if (wireLab[w.id]) at(w.t, () => wireLab[w.id].classList.add("on"));
+    });
+    oHops.forEach(pc => {
+      const t = o.entStart[pc.net];
+      if (t === undefined) return;
+      flowOn(pc.el, 0, ms(t + pc.d - wireEl[pc.net].t0));
+    });
+    dotEl.forEach(d => {
+      const t = o.entStart[d.w];
+      if (t === undefined) return;
+      const [x, y] = [+d.e.getAttribute("cx"), +d.e.getAttribute("cy")];
+      at(t + (distAlong(WP[d.w], [x, y]) || 0), () => d.e.classList.add("on"));
+    });
+    (cur.reveal || []).forEach(r => at(r.u, r.f));
+    (cur.cam || []).forEach(c => at(c.u, () => { if ($("follow").checked && c.view !== view) setView(c.view, false); }));
+    const blocks = new Set([...ph.blocks.map(b => BALIAS[b]).filter(Boolean), ...Object.keys(o.blockOn)]);
+    blocks.forEach(b => at(o.blockOn[b] ?? 0, () => blk[b].classList.add("on")));
+    const regs = ph.blocks.filter(b => /^r\d$/.test(b));
+    if (regs.length) at(o.blockOn.regfile ?? 0, () => regs.forEach(b => T.reg[+b[1]].g.setAttribute("class", "rrow hi")));
+    freeze();
+  }
+  function playDetail() {
+    clearTimers(dTimers);
+    if (view === "overview") return;
+    const vals = cur && cur.vals ? cur.vals : netValues(view, lastX);
+    const pin = partIn(view);
+    dVals.forEach(o => {
+      o.t.classList.remove("on", "hold");
+      if (o.reg) {
+        const held = cur && cur.vals && cur.held ? cur.held[o.net] : o.net === "PC" ? S.pc : S.R[+o.net.slice(1)];
+        o.t.textContent = binStr(held, 8);
+        if (o.edit && document.activeElement !== o.edit) { o.edit.value = binOf(o.net, pin[o.net] ?? held); o.edit.classList.remove("bad"); }
+      }
+      else {
+        o.val.textContent = ""; o.box.classList.remove("on", "hold"); o.val.classList.remove("hold");
+        if (o.dval) { o.dval.textContent = ""; o.dbox.classList.remove("on", "hold"); o.dval.classList.remove("hold"); }
+        if (o.edit && document.activeElement !== o.edit && document.activeElement !== o.dedit) {
+          o.edit.value = binOf(o.net, pin[o.net]); o.edit.classList.remove("bad");
+          if (o.dedit) { o.dedit.value = decOf(o.net, pin[o.net]); o.dedit.classList.remove("bad"); }
+        }
+      }
+    });
+    dList.forEach(e => flowOff(e.ov));
+    dHops.forEach(pc => flowOff(pc.el));
+    gDW.querySelectorAll(".dot").forEach(d => d.classList.remove("on"));
+    dSyms.forEach(s => { s.g.classList.remove("on"); (s.opts || []).forEach(o => o.classList.remove("sel")); });
+    gDV.querySelectorAll(".nval").forEach(e => e.remove());
+    const sc = cur && cur.det[view];
+    if (!sc) return;
+    const { ms, at, v } = timeline(dTimers, cur.off[view] || 0);
+    sc.wires.forEach(w => flowOn(dList[w.i].ov, v ? w.len / v : 0, ms(w.t)));
+    dHops.forEach(pc => {
+      const i = dList.indexOf(pc.w), t = i < 0 ? null : sc.entStart[i];
+      if (t !== null) flowOn(pc.el, 0, ms(t + pc.d - pc.w.t0));
+    });
+    const E = geoOf(view).E;
+    gDW.querySelectorAll(".dot").forEach(d => {
+      const q = [+d.getAttribute("cx"), +d.getAttribute("cy")];
+      const e = E.find(e => e.parent && e.key === d.dataset.net && near(e.p[0], q) && sc.entStart[e.i] !== null);
+      if (e) at(sc.entStart[e.i], () => d.classList.add("on"));
+    });
+    dSyms.forEach((s, i) => {
+      if (sc.symOn[i] === null || sc.symOn[i] === undefined) return;
+      at(sc.symOn[i], () => {
+        s.g.classList.add("on");
+        // a MUX passes one input, a decoder drives one output: only that one lights, chosen by its select value
+        const k = s.sel !== undefined ? vals[s.sel] : undefined;
+        if (s.opts && typeof k === "number") s.opts.forEach((o, j) => o.classList.toggle("sel", j === k));
+      });
+    });
+    const X = cur.x;
+    dVals.forEach(o => {
+      if (o.reg && X && cur.ph.name === "Write back") {
+        const writes = o.net === "PC" ? X.d.op !== "HALT" : o.net === "R" + X.d.dr && (X.cw & RW);
+        const tr = sc.symReady[o.si];
+        if (writes && tr !== null && tr !== undefined) at(tr, () => { o.t.textContent = binStr(o.net === "PC" ? X.next : X.D, 8); });
+      }
+      if (o.reg && cur.regWrite && cur.regWrite.net === o.net) {
+        const tr = sc.symReady[o.si];
+        if (tr !== null && tr !== undefined) at(tr, () => {
+          o.t.textContent = binStr(cur.regWrite.v, 8);
+          if (o.edit && document.activeElement !== o.edit) o.edit.value = binStr(cur.regWrite.v, 8);   // the box shows what it holds now
+        });
+      }
+      const t = o.reg ? sc.symOn[o.si] : sc.pinOn[o.pi];
+      if (t !== null && t !== undefined) at(t, () => {
+        o.t.classList.add("on");
+        if (o.reg) return;
+        const x = vals[o.net];
+        o.val.textContent = binOf(o.net, x);
+        fitText(o.val, +o.box.getAttribute("width") - 6);
+        o.box.classList.add("on");
+        if (o.dval) { o.dval.textContent = decOf(o.net, x); fitText(o.dval, +o.dbox.getAttribute("width") - 6); o.dbox.classList.add("on"); }
+      });
+      const h = !o.reg && sc.pinHold[o.pi];
+      if (h) {
+        at(h[0], () => { [o.box, o.val, o.dbox, o.dval].forEach(e => e && e.classList.add("hold")); });
+        at(h[1], () => { [o.box, o.val, o.dbox, o.dval].forEach(e => e && e.classList.remove("hold")); });
+      }
+    });
+    // a value label appears when its signal sets off
+    const times = [...new Set(sc.keyStart.values())].sort((a, b) => a - b);
+    times.forEach(t => at(t, () => {
+      gDV.querySelectorAll(".nval").forEach(e => e.remove());
+      placeLabels(vals, new Set([...sc.keyStart].filter(([, s]) => s <= t).map(([k]) => k)));
+    }));
+    freeze();
+  }
+
+  // ---------------------------------------------------------------- render (overview cards, drawer listing, inside view)
+  const OPTXT = { MOV: "A", ADD: "A + B", SUB: "A − B", AND: "A AND B", OR: "A OR B", XOR: "A XOR B", NOT: "NOT A", INC: "A + 1" };
+  const setChip = (c, text, hi) => { if (!c) return; c.t.textContent = text; c.g.setAttribute("class", "chip" + (hi ? " hi" : "")); fitText(c.t, c.w); };
+  // the blocks before anything runs: only what is stored (PC, registers, memory); the rest fills in as signals arrive
+  const render = () => {
+    const dash = "—";
+    setCellV(T.fPC, String(S.pc).padStart(2, "0"));
+    [T.fIR, T.fNext, T.aA, T.aB, T.aF, T.sB, T.sH, T.sOut, ...Object.values(T.irCell)].forEach(c => setCellV(c, dash));
+    T.fAsm.textContent = S.halted ? "halted" : ""; T.irAsm.textContent = ""; T.aluOp.textContent = "idle"; T.shfOp.textContent = "";
+    T.cw.textContent = "0x----"; T.takenEq.textContent = "TAKEN = PL · (JB + A = 0)";
+    for (const n in T.sig) setChip(T.sig[n], n, false);
+    [[T.chip_regfile_SA, "SA"], [T.chip_regfile_SB, "SB"], [T.chip_regfile_DR, "DR"], [T.chip_regfile_RW, "RW"], [T.chip_mem_MW, "MW"],
+      [T.chip_mb, "MB"], [T.chip_muxf, "MF"], [T.chip_muxd, "MD"], [T.chip_alu_G, "G"], [T.fC, "C"], [T.fZ, "Z"], [T.fN, "N"]].forEach(([c, n]) => setChip(c, n, false));
+    S.R.forEach((v, k) => regRow(k, v));
+    wireLab.w_busd.textContent = `BUS D = ${S.busD}  →  destination register`;
+    SHOW.mem(null);
+    lastX = null;
+    $("prog").querySelectorAll("li").forEach((li, i) => li.classList.toggle("cur", i === S.pc && !S.halted));
+    playDetail();
+  };
+
+  // The values shown in the blocks, one group at a time, so each can change the moment its signal arrives.
+  const setCellV = (c, v) => { c.v.textContent = v; fitText(c.v, c.w); };
+  function regRow(k, v) { T.reg[k].v.textContent = v; T.reg[k].b.textContent = binStr(v, 8); }
+  const usesOf = op => ({ A: ["MOV","ADD","SUB","AND","OR","XOR","NOT","INC","LD","ST","BRZ"].includes(op),
+    B: ["ADD","SUB","AND","OR","XOR","SHL","SHR","ST"].includes(op) });
+  const SHOW = {
+    fetchPC: () => setCellV(T.fPC, String(S.pc).padStart(2, "0")),
+    fetchIR: x => { setCellV(T.fIR, hex(x.w, 4)); T.fAsm.textContent = asm(x.w); fitText(T.fAsm, 244); },
+    irAsm: x => { T.irAsm.textContent = asm(x.w); fitText(T.irAsm, 200); },
+    fields: x => { const d = x.d; setCellV(T.irCell.OP, hex(x.w >> 12, 1)); setCellV(T.irCell.DR, d.dr); setCellV(T.irCell.SA, d.sa);
+      setCellV(T.irCell.SB, d.sb); setCellV(T.irCell.IMM, d.imm); },
+    cw: x => {
+      const cw = x.cw, bit = b => +!!(cw & b);
+      T.cw.textContent = "0x" + hex(cw, 4); fitText(T.cw, 140);
+      [["MB", MB], ["MF", MF], ["MD", MD], ["RW", RW], ["MW", MW], ["PL", PL], ["JB", JB], ["HALT", HL]].forEach(([n, b]) => setChip(T.sig[n], `${n} ${bit(b)}`, bit(b) === 1));
+    },
+    flags: x => {
+      const cw = x.cw, d = x.d, bit = b => +!!(cw & b), u = usesOf(d.op);
+      setChip(T.chip_regfile_SA, `SA ${d.sa}`, u.A); setChip(T.chip_regfile_SB, `SB ${d.sb}`, u.B);
+      setChip(T.chip_regfile_DR, `DR ${d.dr}`, !!(cw & RW)); setChip(T.chip_regfile_RW, `RW ${bit(RW)}`, bit(RW) === 1);
+      setChip(T.chip_mem_MW, `MW ${bit(MW)}`, bit(MW) === 1); setChip(T.chip_mb, `MB ${bit(MB)}`, bit(MB) === 1);
+      setChip(T.chip_muxf, `MF ${bit(MF)}`, bit(MF) === 1); setChip(T.chip_muxd, `MD ${bit(MD)}`, bit(MD) === 1);
+      setChip(T.chip_alu_G, `G ${bin(cw & 15, 4)}`, (cw & 15) !== 0);
+    },
+    taken: x => { T.takenEq.textContent = `TAKEN = PL · (JB + A = 0) = ${+x.taken}`; fitText(T.takenEq, 244); },
+    aluIn: x => {
+      const isAlu = !!OPTXT[x.d.op] && !(x.cw & MF) && !(x.cw & MD);
+      T.aluOp.textContent = isAlu ? OPTXT[x.d.op] : "idle"; fitText(T.aluOp, 200);
+      setCellV(T.aA, x.A); setCellV(T.aB, x.B);
+    },
+    aluOut: x => {
+      const isAlu = !!OPTXT[x.d.op] && !(x.cw & MF) && !(x.cw & MD);
+      setCellV(T.aF, x.alu);
+      setChip(T.fC, `C ${x.carry}`, isAlu && x.carry === 1);
+      setChip(T.fZ, `Z ${+(x.alu === 0)}`, isAlu && x.alu === 0);
+      setChip(T.fN, `N ${x.alu >> 7 & 1}`, isAlu && (x.alu >> 7 & 1) === 1);
+    },
+    shfIn: x => {
+      const h = x.cw >> 4 & 3;
+      setCellV(T.sB, x.B); setCellV(T.sH, bin(h, 2));
+      T.shfOp.textContent = (x.cw & MF) ? (h === 1 ? "shift right by 1" : h === 2 ? "shift left by 1" : "pass B through") : "not used now";
+      fitText(T.shfOp, 200);
+    },
+    shfOut: x => setCellV(T.sOut, x.shf),
+    next: x => setCellV(T.fNext, x.taken ? `${x.d.imm} jump` : x.d.op === "HALT" ? "stay" : String(x.next)),
+    pcNew: x => { if (x.d.op !== "HALT") setCellV(T.fPC, String(x.next).padStart(2, "0")); },
+    busD: x => { if (x.cw & RW) wireLab.w_busd.textContent = `BUS D = ${x.D}  →  destination register`; },
+    reg: x => { if (x.cw & RW) regRow(x.d.dr, x.D); },
+    // memory as it will be after this instruction (a store is shown as soon as it happens)
+    mem: x => {
+      const M = S.M.slice(), touched = new Set(S.touched);
+      let last = S.last;
+      if (x && x.cw & MW) { M[x.A] = x.B; touched.add(x.A); last = x.A; }
+      if (x && x.d.op === "LD") { touched.add(x.A); last = x.A; }
+      const addrs = [...touched].sort((a, b) => a - b), shown = addrs.length ? addrs.slice(-4) : [16, 17, 32, 33];
+      T.mem.forEach((c, k) => {
+        const a = shown[k];
+        c.g.querySelector("text").textContent = a === undefined ? "" : `M[${a}]`;
+        setCellV(c, a === undefined ? "" : M[a]);
+        c.g.setAttribute("class", "cellg" + (last === a ? " hi" : ""));
+      });
+    },
+  };
+  // when, inside a stage, each group of values changes: the moment its signal reaches that place
+  const revealsFor = (ph, x, det, off, over) => {
+    const pinT = (part, net) => {
+      if (!det[part]) return null;
+      const i = geoOf(part).pins.findIndex(p => p.net === net), t = i < 0 ? null : det[part].pinOn[i];
+      return t === null || t === undefined ? null : (off[part] || 0) + t;
+    };
+    const key = (part, net) => (det[part] && det[part].keyStart.has(net) ? (off[part] || 0) + det[part].keyStart.get(net) : null);
+    const ready = (part, pred) => {
+      if (!det[part]) return null;
+      const i = SCH[part].parts.findIndex(pred), t = i < 0 ? null : det[part].symReady[i];
+      return t === null || t === undefined ? null : (off[part] || 0) + t;
+    };
+    const ob = id => over.blockOn[id] ?? null, ow = id => over.entStart[id] ?? null;
+    const R = [], add = (u, f) => R.push({ u: u ?? 0, f: () => f(x) });
+    const n = ph.name;
+    if (n === "Fetch") {
+      add(0, SHOW.fetchPC);
+      add(pinT("FETCH", "IR") ?? ow("w_ir"), SHOW.fetchIR);
+      add(ob("decode") ?? pinT("FETCH", "IR"), SHOW.irAsm);
+    } else if (n === "Decode") {
+      add(key("DECODE_CONTROL", "OP"), SHOW.fields);
+      add(key("DECODE_CONTROL", "G"), SHOW.cw);
+      add(pinT("DECODE_CONTROL", "RW"), SHOW.flags);
+      if (!["BRZ", "JMP"].includes(x.d.op)) add(pinT("DECODE_CONTROL", "RW"), SHOW.taken);
+    } else if (n === "Write back") {
+      add(key("FETCH", "PC_NEXT") ?? 0, SHOW.next);
+      add(ready("FETCH", p => p[0] === "reg"), SHOW.pcNew);
+      add(ow("w_busd"), SHOW.busD);
+      add(ready("REGISTER_FILE", p => p[0] === "reg" && p[6] === "R" + x.d.dr), SHOW.reg);
+      add(ob("mem") ?? 0, SHOW.mem);
+    } else if (!n.startsWith("Read")) {
+      const alu = det.ALU || ob("alu") !== null, shf = det.SHIFTER || ob("shf") !== null;
+      if (alu) { add(ob("alu"), SHOW.aluIn); add(ow("w_alu_f") ?? (det.ALU ? (off.ALU || 0) + det.ALU.end : 0), SHOW.aluOut); }
+      else { add(0, SHOW.aluIn); add(0, SHOW.aluOut); }
+      if (shf) { add(ob("shf"), SHOW.shfIn); add(ow("w_shf_f") ?? (det.SHIFTER ? (off.SHIFTER || 0) + det.SHIFTER.end : 0), SHOW.shfOut); }
+      else { add(0, SHOW.shfIn); add(0, SHOW.shfOut); }
+      if (["BRZ", "JMP"].includes(x.d.op)) add(pinT("DECODE_CONTROL", "TAKEN"), SHOW.taken);
+      if (x.d.op === "LD") add(ob("mem"), SHOW.mem);
+    }
+    return R;
+  };
+  // ---- one part on its own: type values into its input boxes, and the signal runs through that part only
+  const PART_DEFAULTS = {
+    FETCH: { TARGET: 0, TAKEN: 0, RUN: 1, CLK: "clk" },
+    DECODE_CONTROL: { IR: 0xC005, BUS_A: 0 },
+    REGISTER_FILE: { SA: 0, BUS_D: 0, DR: 0, RW: 0, CLK: "clk", SB: 1 },
+    ALU: { A: 5, B: 3, G: 0b0010 },
+    SHIFTER: { B: 5, H: 0b01 },
+  };
+  const partInputs = {};
+  function partIn(part) {
+    if (!partInputs[part]) {
+      const d = Object.assign({}, PART_DEFAULTS[part] || {});
+      if (part === "DECODE_CONTROL") d.IR = PROGRAMS[prog].code[S.pc] ?? 0;
+      if (part === "FETCH") d.PC = S.pc;
+      if (part === "REGISTER_FILE") S.R.forEach((r, k) => { d["R" + k] = r; });
+      partInputs[part] = d;
+    }
+    return partInputs[part];
+  }
+  // the binary box takes 0s and 1s; the other box takes decimal (hex for 16 bits, 0x optional)
+  const parseBin = t => { t = t.replace(/[\s_]/g, ""); return /^[01]+$/.test(t) ? parseInt(t, 2) : NaN; };
+  const parseDec = (t, bits) => {
+    t = t.trim().toLowerCase();
+    if (bits === 16) { t = t.replace(/^0x/, ""); return /^[0-9a-f]+$/.test(t) ? parseInt(t, 16) : NaN; }
+    return /^\d+$/.test(t) ? parseInt(t, 10) : NaN;
+  };
+  function pairInputs(part, net, binIn, decIn) {
+    const n = bitsOf(net), ok = v => !Number.isNaN(v) && v >= 0 && v < 2 ** n;
+    const read = which => (which === binIn ? parseBin(binIn.value) : parseDec(decIn.value, n));
+    const follow = which => {
+      const v = read(which);
+      which.classList.toggle("bad", !ok(v));
+      if (!ok(v)) return;
+      if (which === binIn && decIn) { decIn.value = decOf(net, v); decIn.classList.remove("bad"); }
+      if (which === decIn) { binIn.value = binOf(net, v); binIn.classList.remove("bad"); }
+    };
+    const commit = which => {
+      const v = read(which);
+      if (!ok(v)) { which.classList.add("bad"); return; }
+      // the value is kept; the part runs only from the "Run this part" button
+      partIn(part)[net] = v;
+      binIn.value = binOf(net, v);
+      if (decIn) decIn.value = decOf(net, v);
+    };
+    [binIn, decIn].filter(Boolean).forEach(inp => {
+      inp.addEventListener("input", () => follow(inp));
+      inp.addEventListener("keydown", e => {
+        e.stopPropagation();
+        if (e.key === "Enter") { e.preventDefault(); commit(inp); }
+        if (e.key === "Escape") inp.blur();
+      });
+      inp.addEventListener("change", () => commit(inp));
+    });
+  }
+  // every signal of the part, worked out from the typed inputs (registers keep what they hold)
+  function partValues(part, I) {
+    const b = v => +!!v;
+    if (part === "FETCH") {
+      const pc = I.PC, inc = (pc + 1) & 255;
+      return { CLK: "clk", RUN: I.RUN, TAKEN: I.TAKEN, TARGET: I.TARGET, PC: pc, ONE: 1, PC_INC: inc,
+        PC_NEXT: I.TAKEN ? I.TARGET : inc, IR: PROGRAMS[prog].code[pc] ?? 0 };
+    }
+    if (part === "DECODE_CONTROL") {
+      const d = decode(I.IR), cw = CW[d.op], a0 = I.BUS_A === 0;
+      return { IR: I.IR, IMM: d.imm, SA: d.sa, DR: d.dr, OP: I.IR >> 12, SB: d.sb, CW: cw, G: cw & 15, H: cw >> 4 & 3,
+        MF: b(cw & MF), MB: b(cw & MB), MD: b(cw & MD), RW: b(cw & RW), MW: b(cw & MW), PL: b(cw & PL), JB: b(cw & JB),
+        HALT: b(cw & HL), RUN: b(!(cw & HL)), ZERO: 0, BUS_A: I.BUS_A, A_IS_ZERO: b(a0), JUMP_OK: b((cw & JB) || a0),
+        TAKEN: b((cw & PL) && ((cw & JB) || a0)) };
+    }
+    if (part === "REGISTER_FILE") {
+      // a write happens on the clock; the read MUXes then show what the registers hold after it
+      const R2 = [I.R0, I.R1, I.R2, I.R3]; if (I.RW) R2[I.DR] = I.BUS_D;
+      const o = { CLK: "clk", BUS_D: I.BUS_D, DR: I.DR, RW: I.RW, SA: I.SA, SB: I.SB, A_DATA: R2[I.SA], B_DATA: R2[I.SB] };
+      for (let k = 0; k < 4; k++) { o["D" + k] = b(I.DR === k); o["LOAD" + k] = b(I.DR === k && I.RW); o["R" + k] = R2[k]; }
+      return o;
+    }
+    if (part === "ALU") {
+      const a = aluInternals({ g: I.G, A: I.A, B: I.B });
+      return { A: I.A, B: I.B, G: I.G, CI: a.ci, S1S0: a.s10, S2: a.s2, ZERO: 0, NOT_B: a.nb, ONES: 255, Y: a.Y, NOT_S2: 1 - a.s2,
+        CIN: a.cin, ARITH: a.arith, C: a.c, L_AND: a.L[0], L_OR: a.L[1], L_XOR: a.L[2], L_NOT: a.L[3], LOGIC: a.L[a.s10],
+        F: a.F, Z: b(a.F === 0), N: a.F >> 7 & 1 };
+    }
+    if (part === "SHIFTER") return { B: I.B, H: I.H, ONE: 1, SHR: I.B >> 1, SHL: (I.B << 1) & 255, OUT: [I.B, I.B >> 1, (I.B << 1) & 255, I.B][I.H] };
+    return {};
+  }
+  function runPart(part) {
+    if (busy || view !== part || !SCH[part]) return;
+    const vals = partValues(part, partIn(part));
+    const act = new Set(SCH[part].wires.map(w => w[0]));
+    // the decoder drives one line only, so only that line and its load line carry a 1
+    if (part === "REGISTER_FILE") for (let k = 0; k < 4; k++) { if (!vals["D" + k]) act.delete("D" + k); if (!vals["LOAD" + k]) act.delete("LOAD" + k); }
+    // RW = 0 means no write signal at all: nothing goes from RW into the AND gates
+    if (part === "REGISTER_FILE" && !vals.RW) act.delete("RW");
+    const v = reduce ? 0 : SPEED_PX;
+    clearLights();
+    let regWrite = null;
+    if (part === "REGISTER_FILE" && vals.RW) regWrite = { net: "R" + vals.DR, v: vals.BUS_D };
+    if (part === "FETCH" && vals.RUN) regWrite = { net: "PC", v: vals.PC_NEXT };
+    const I = partIn(part), held = { PC: I.PC ?? S.pc };
+    for (let k = 0; k < 4; k++) held["R" + k] = I["R" + k] ?? S.R[k];
+    cur = { t0: simNow(), v, held, det: { [part]: schedDetail(part, act, SPEED_PX * HOLD_MS * speed, vals) }, off: {},
+      over: { wires: [], entStart: {}, blockOn: {}, cardReady: {}, end: 0 }, ph: { name: "Part", blocks: [] }, cam: [], x: null,
+      reveal: [], vals, regWrite };
+    playDetail();
+  }
+  $("bPart").addEventListener("click", () => runPart(view));
+
+  // after an instruction: every value as it now is
+  const settle = x => { Object.values(SHOW).forEach(f => f(x)); };
+
+  const buildList = () => {
+    const ol = $("prog");
+    ol.innerHTML = "";
+    PROGRAMS[prog].code.forEach((w, i) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="a">${String(i).padStart(2, "0")}</span><span class="h">${hex(w, 4)}</span><span>${asm(w)}</span>`;
+      ol.appendChild(li);
+    });
+    $("progName").textContent = PROGRAMS[prog].custom ? `✎ ${PROGRAMS[prog].name}` : `${prog + 1} · ${PROGRAMS[prog].name}`;
+    $("progList").querySelectorAll("li").forEach((li, i) => li.setAttribute("aria-selected", String(i === prog)));
+    setCode(PROGRAMS[prog]);
+  };
+  // template menu: a styled list with a short line on what each program shows
+  const menu = open => {
+    $("progList").hidden = !open;
+    $("progBtn").setAttribute("aria-expanded", String(open));
+    if (open) { const li = $("progList").children[prog]; li && li.scrollIntoView({ block: "nearest" }); $("progList").querySelectorAll("li").forEach((l, i) => l.classList.toggle("kb", i === prog)); }
+  };
+  const menuItem = (p, i) => {
+    const li = $("progList").children[i] || $("progList").appendChild(document.createElement("li"));
+    li.setAttribute("role", "option"); li.tabIndex = -1;
+    li.innerHTML = `<span class="n">${p.custom ? "✎" : i + 1}</span><span class="t"></span>`;
+    li.querySelector(".t").textContent = p.name; li.title = p.about;
+    li.onclick = () => { menu(false); selectProgram(i); $("progBtn").focus(); };
+  };
+  // your own program: kept in this browser so it is there next time
+  const CUSTOM_KEY = "simple-computer.code";
+  const customProgram = (src, code) => ({ name: "My code", about: `written in the code drawer · ${code.length} instruction${code.length === 1 ? "" : "s"}`, src, code, custom: true });
+  try {
+    const saved = localStorage.getItem(CUSTOM_KEY);
+    if (saved) { const a = assemble(saved); if (!a.errors.length && a.code.length) PROGRAMS.push(customProgram(saved, a.code)); }
+  } catch (e) { /* storage blocked: start without it */ }
+  PROGRAMS.forEach(menuItem);
+  $("progBtn").addEventListener("click", () => menu($("progList").hidden));
+  $("progBtn").addEventListener("keydown", e => {
+    const items = [...$("progList").children], open = !$("progList").hidden;
+    if (!open && (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ")) { e.preventDefault(); e.stopPropagation(); return menu(true); }
+    if (!open) return;
+    let k = items.findIndex(l => l.classList.contains("kb"));
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); e.stopPropagation(); k = (k + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+      items.forEach((l, i) => l.classList.toggle("kb", i === k)); items[k].scrollIntoView({ block: "nearest" }); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); menu(false); if (k >= 0) selectProgram(k); }
+    else if (e.key === "Escape") { e.stopPropagation(); menu(false); }
+  });
+  document.addEventListener("click", e => { if (!$("progDD").contains(e.target)) menu(false); });
+  // code drawer: the program as text, with line numbers
+  let badLines = new Set();
+  const gutter = () => {
+    const n = $("codeArea").value.split("\n").length;
+    $("codeGutter").innerHTML = Array.from({ length: n }, (_, i) => badLines.has(i + 1) ? `<span class="bad">${i + 1}</span>` : String(i + 1)).join("\n");
+    $("codeGutter").scrollTop = $("codeArea").scrollTop;
+  };
+  const codeMsg = (text, ok) => { $("codeMsg").textContent = text; $("codeMsg").classList.toggle("ok", !!ok); };
+  const showErrors = errs => {
+    badLines = new Set(errs.map(e => e.ln));
+    const ul = $("codeErr");
+    ul.innerHTML = "";
+    ul.hidden = !errs.length;
+    errs.slice(0, 30).forEach(e => {
+      const li = document.createElement("li");
+      li.innerHTML = `<b>line ${e.ln}</b>`; li.append(e.msg);
+      li.addEventListener("click", () => goLine(e.ln));
+      ul.appendChild(li);
+    });
+    gutter();
+  };
+  const goLine = ln => {
+    const a = $("codeArea"), lines = a.value.split("\n");
+    const start = lines.slice(0, ln - 1).reduce((n, l) => n + l.length + 1, 0);
+    a.focus(); a.setSelectionRange(start, start + (lines[ln - 1] || "").length);
+    a.scrollTop = Math.max(0, (ln - 4) * 19.2);
+  };
+  function setCode(p) {
+    $("codeArea").value = p.src;
+    $("codeFrom").textContent = p.custom ? "Your program. Change it and press Assemble & load again." : `Template: ${p.name}. Change anything, then Assemble & load runs your version as “My code”.`;
+    showErrors([]); codeMsg("Ctrl + Enter");
+  }
+  // assemble the text; with no errors it becomes "My code" in program memory, ready to Step or Run
+  const loadCode = () => {
+    const src = $("codeArea").value, a = assemble(src);
+    if (!a.code.length && !a.errors.length) a.errors.push({ ln: 1, msg: "write at least one instruction" });
+    showErrors(a.errors);
+    if (a.errors.length) { codeMsg(`${a.errors.length} error${a.errors.length === 1 ? "" : "s"}, nothing loaded`); return; }
+    const p = customProgram(src, a.code);
+    let i = PROGRAMS.findIndex(q => q.custom);
+    if (i < 0) i = PROGRAMS.push(p) - 1; else PROGRAMS[i] = p;
+    menuItem(p, i);
+    try { localStorage.setItem(CUSTOM_KEY, src); } catch (e) { /* not saved, still loaded */ }
+    selectProgram(i);
+    codeMsg(`loaded ${a.code.length} instruction${a.code.length === 1 ? "" : "s"} into program memory`, true);
+  };
+  $("bAssemble").addEventListener("click", loadCode);
+  $("codeArea").addEventListener("input", () => { if (badLines.size) { badLines = new Set(); $("codeErr").hidden = true; } gutter(); });
+  $("codeArea").addEventListener("scroll", () => { $("codeGutter").scrollTop = $("codeArea").scrollTop; });
+  $("codeArea").addEventListener("keydown", e => {
+    e.stopPropagation();
+    if (e.key === "Tab") { e.preventDefault(); const a = e.target, i = a.selectionStart; a.setRangeText("        ", i, a.selectionEnd, "end"); gutter(); }
+    if (e.key === "Escape") codeDrawer(false);
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); loadCode(); }
+  });
+
+  // ---------------------------------------------------------------- animation
+  const BALIAS = { pc: "fetch", prog: "fetch", muxpc: "fetch", add: "fetch", ir: "decode", ctrl: "decode", cw: "decode",
+    dec: "regfile", muxa: "regfile", muxb: "regfile", r0: "regfile", r1: "regfile", r2: "regfile", r3: "regfile",
+    mb: "mb", alu: "alu", shf: "shf", muxf: "muxf", mem: "mem", muxd: "muxd" };
+  const WALIAS = { prog_ir: ["w_ir"], imm_mux: ["w_imm_f", "w_taken"], busA_alu: ["w_a"], busA_mem: ["w_a2"],
+    busA_dec: ["w_a2", "w_a_dec"], muxb_mb: ["w_b"], imm_mb: ["w_imm_mb"], mb_alu: ["w_bb_alu"],
+    mb_shf: ["w_bb_shf"], mb_mem: ["w_bb_mem"], alu_muxf: ["w_alu_f"], shf_muxf: ["w_shf_f"], muxf_muxd: ["w_f_d"],
+    mem_muxd: ["w_mem_d"], busd: ["w_busd"] };
+  const PART_CARD = { FETCH: "fetch", DECODE_CONTROL: "decode", REGISTER_FILE: "regfile", ALU: "alu", SHIFTER: "shf" };
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const SPEEDS = [0.125, 0.25, 0.5, 1, 2], SPEED_LABEL = ["⅛×", "¼×", "½×", "1×", "2×"];
+  let speed = 1, busy = false, running = false, token = 0;
+  const clearLights = () => {
+    clearTimers(oTimers);
+    Object.values(blk).forEach(b => b.classList.remove("on"));
+    Object.values(wireEl).forEach(w => flowOff(w.ov));
+    Object.values(wireLab).forEach(w => w.classList.remove("on"));
+    dotEl.forEach(o => o.e.classList.remove("on"));
+    oHops.forEach(pc => flowOff(pc.el));
+    T.reg.forEach(r => r.g.setAttribute("class", "rrow"));
+  };
+  const HOLD_MS = 1800;  // how long an input value is shown before its signal leaves, and an output after it arrives
+  // waits on the clock that stops while paused
+  const waitSim = (ms, my) => new Promise(done => {
+    const end = simNow() + ms;
+    const tick = () => { if (my !== token || simNow() >= end) return done(); setTimeout(tick, clk.paused ? 100 : Math.max(16, Math.min(100, (end - simNow()) / clk.rate))); };
+    tick();
+  });
+  const pauseClock = () => {
+    if (clk.paused) return;
+    clk.base = simNow(); clk.paused = true;
+    clearTimers(oTimers); clearTimers(dTimers);
+    flowAnims().forEach(a => a.pause());
+  };
+  const resumeClock = () => {
+    if (!clk.paused) return;
+    clk.start = performance.now(); clk.paused = false;
+    if (cur) { clearLights(); applyOver(cur.ph); playDetail(); }
+  };
+  const runPhase = async (ph, x, idx, my) => {
+    clearLights();
+    $("stageName").textContent = ph.name;
+    $("stageText").textContent = ph.text;
+    $("phases").querySelectorAll("i").forEach((e, i) => e.className = i < idx ? "done" : i === idx ? "on" : "");
+    lastX = x;
+    const nets = ph.nets || {};
+    $("tabs").querySelectorAll(".tab").forEach(b => b.classList.toggle("live", !!nets[b.dataset.v] && nets[b.dataset.v].length > 0));
+    // schedules: inside every part from its own inputs, then the overview with each card taking as long as its inside
+    const v = reduce ? 0 : SPEED_PX;
+    const hold = SPEED_PX * HOLD_MS * speed;
+    const det = {}, partEnd = {};
+    for (const part in nets) {
+      const a = new Set(nets[part]);
+      if (a.has("A_DATA") || a.has("B_DATA")) a.add("RBUS");
+      det[part] = schedDetail(part, a, hold, netValues(part, x));
+      if (PART_CARD[part]) partEnd[PART_CARD[part]] = det[part].end;
+    }
+    const ws = [...new Set(ph.wires.flatMap(w => WALIAS[w] || []))];
+    const over = schedOver(ws, partEnd, hold);
+    const off = {};
+    for (const part in det) off[part] = over.cardReady[PART_CARD[part]] || 0;
+    // follow the signal: the overview while it travels between parts, the inside of a part while it works there
+    if (!over.wires.length && !Object.values(det).some(d => d.wires.length)) return;
+    const target = ph.view || "overview", cam = [];
+    const inner = det[target] && det[target].wires.length ? off[target] : null;
+    if (inner === null) cam.push({ u: 0, view: "overview" });
+    else {
+      if (inner > 0) cam.push({ u: 0, view: "overview" });
+      cam.push({ u: inner, view: target });
+      // back to the overview only if a wire there is still carrying the signal after this part is done
+      const wend = Math.max(0, ...over.wires.map(w => w.t + w.len));
+      if (wend > inner + det[target].end) cam.push({ u: inner + det[target].end, view: "overview" });
+    }
+    cur = { t0: simNow(), v, det, off, over, ph, cam, x, reveal: revealsFor(ph, x, det, off, over) };
+    applyOver(ph);
+    playDetail();
+    const endU = Math.max(over.end, ...Object.keys(det).map(p => off[p] + det[p].end), 0);
+    await waitSim(reduce ? 450 * clk.rate : endU / v + 260, my);
+  };
+
+  const step = async () => {
+    if (busy || S.halted) return;
+    busy = true; document.body.classList.add("busy");
+    const my = token;
+    const x = exec();
+    lastX = x;
+    $("prog").querySelectorAll("li").forEach((li, i) => li.classList.toggle("cur", i === S.pc));
+    const P = plan(x);
+    for (let i = 0; i < P.length; i++) {
+      await runPhase(P[i], x, i, my);
+      if (my !== token) { busy = false; document.body.classList.remove("busy"); return; }
+    }
+    S.cycle++;
+    S.busD = x.cw & RW ? x.D : S.busD;
+    if (x.cw & RW) S.R[x.d.dr] = x.D;
+    S.last = null;
+    if (x.cw & MW) { S.M[x.A] = x.B; S.touched.add(x.A); S.last = x.A; }
+    if (x.d.op === "LD") { S.touched.add(x.A); S.last = x.A; }
+    if (x.cw & HL) { S.halted = true; } else { S.pc = x.next; }
+    cur = null;
+    $("tabs").querySelectorAll(".tab").forEach(b => b.classList.remove("live"));
+    clearLights();
+    settle(x);
+    for (const k in partInputs) delete partInputs[k];
+    lastX = null;
+    $("prog").querySelectorAll("li").forEach((li, i) => li.classList.toggle("cur", i === S.pc && !S.halted));
+    playDetail();
+    if (S.halted) {
+      $("stageName").textContent = "Halted";
+      $("stageText").textContent = `Done after ${S.cycle} instructions: R0 = ${S.R[0]}, R1 = ${S.R[1]}, R2 = ${S.R[2]}, R3 = ${S.R[3]}. Press Reset to run it again.`;
+      $("statusR").textContent = "";
+      setRun(false);
+    }
+    busy = false; document.body.classList.remove("busy");
+    runLabel();
+    if (running && !S.halted) setTimeout(() => running && step(), 200 / speed);
+  };
+
+  const runLabel = () => {
+    $("bRun").setAttribute("aria-pressed", String(running));
+    setIcon($("bRun").querySelector("svg"), running ? "pause" : "play");
+    $("bRun").querySelector("span").textContent = running ? "Pause" : clk.paused ? "Continue" : "Run";
+  };
+  const setRun = on => {
+    running = on;
+    if (!on && busy && cur) pauseClock();
+    if (on) resumeClock();
+    runLabel();
+    if (on && !busy) step();
+  };
+  const fullReset = () => {
+    for (const k in partInputs) delete partInputs[k];
+    token++; busy = false; document.body.classList.remove("busy"); clk.paused = false; clk.start = performance.now(); setRun(false); cur = null; clearLights();
+    reset();
+    $("stageName").textContent = "Ready";
+    $("stageText").textContent = `${PROGRAMS[prog].name} is loaded. Step runs one instruction; Run plays them all.`;
+    $("statusR").textContent = "";
+    $("phases").querySelectorAll("i").forEach(e => e.className = "");
+  };
+  const selectProgram = i => { prog = i; buildList(); fullReset(); };
+
+  const setSpeed = s => {
+    // change the speed now, even in the middle of a signal
+    clk.base = simNow(); clk.start = performance.now(); clk.rate = s;
+    speed = s;
+    if (cur && cur.over && !clk.paused) { clearLights(); applyOver(cur.ph); playDetail(); }
+    $("speeds").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.s === s)));
+  };
+  SPEEDS.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.className = "ib"; b.type = "button"; b.dataset.s = String(s); b.textContent = SPEED_LABEL[i];
+    b.setAttribute("aria-label", `Speed ${SPEED_LABEL[i]}`);
+    b.addEventListener("click", () => setSpeed(s));
+    $("speeds").appendChild(b);
+  });
+  const drawer = open => {
+    $("drawer").classList.toggle("open", open);
+    $("bList").setAttribute("aria-pressed", String(open));
+  };
+  function codeDrawer(open) {
+    $("codeDrawer").classList.toggle("open", open);
+    $("bCode").setAttribute("aria-pressed", String(open));
+    if (open) setTimeout(() => $("codeArea").focus(), 230);
+  }
+  $("bCode").addEventListener("click", () => codeDrawer(!$("codeDrawer").classList.contains("open")));
+  // light / dark: the icon shows the theme you switch to
+  const themeIcon = () => {
+    const light = document.documentElement.dataset.theme === "light";
+    setIcon($("bTheme").querySelector("svg"), light ? "moon" : "sun");
+    $("bTheme").setAttribute("aria-label", light ? "Switch to dark" : "Switch to light");
+  };
+  const toggleTheme = () => {
+    const t = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = t;
+    try { localStorage.setItem("simple-computer.theme", t); } catch (e) { /* not remembered */ }
+    themeIcon();
+  };
+  $("bTheme").addEventListener("click", toggleTheme);
+  themeIcon();
+  $("bCodeClose").addEventListener("click", () => codeDrawer(false));
+  $("bList").addEventListener("click", () => drawer(!$("drawer").classList.contains("open")));
+  $("bClose").addEventListener("click", () => drawer(false));
+  // Step while paused plays on to the end of this instruction
+  const stepBtn = () => { if (running) return; if (busy && clk.paused) { resumeClock(); runLabel(); } else step(); };
+  $("bStep").addEventListener("click", stepBtn);
+  $("bRun").addEventListener("click", () => setRun(!running));
+  $("bReset").addEventListener("click", fullReset);
+  addEventListener("keydown", e => {
+    if (e.target.closest && e.target.closest("input, textarea, select")) return;
+    if (e.key === "ArrowRight" || e.key === "n") { e.preventDefault(); stepBtn(); }
+    else if (e.key === " ") { e.preventDefault(); setRun(!running); }
+    else if (e.key === "r" || e.key === "R") fullReset();
+    else if (e.key === "s" || e.key === "S") setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]);
+    else if (e.key === "Escape") { drawer(false); codeDrawer(false); menu(false); }
+    else if (/^[1-9]$/.test(e.key) && +e.key <= PROGRAMS.length) selectProgram(+e.key - 1);
+    else if (e.key === "c" || e.key === "C") codeDrawer(!$("codeDrawer").classList.contains("open"));
+    else if (e.key === "t" || e.key === "T") toggleTheme();
+  });
+
+  setSpeed(1);
+  buildList();
+  fullReset();
+  setView("overview", false);
+  const refit = () => { fitView($("over"), [gW, gB], 14); if (!busy) render(); if (view !== "overview") fitDetail(); };
+  refit();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(refit);
+  addEventListener("resize", () => { if (view !== "overview") fitDetail(); });
+})();
+</script>
+</body>
+</html>
